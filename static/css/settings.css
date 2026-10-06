@@ -1,0 +1,800 @@
+/* ============================================================
+   Aegis — 设置弹窗 / 首次启动向导
+   复用 common.css 的 CSS 变量（--primary / --border / --card-bg ...），
+   深浅色通过 html[data-theme="dark"] 自动适配，不污染任何既有样式文件。
+   ============================================================ */
+
+/* ── 顶部常驻提示条（未完成配置时）────────────────────── */
+.aegis-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(245, 158, 11, 0.14);
+    border-bottom: 1px solid var(--warning);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    flex-shrink: 0;
+}
+.aegis-banner__icon {
+    font-size: 15px;
+    line-height: 1;
+}
+.aegis-banner__text {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── 弹窗骨架 ─────────────────────────────────────────── */
+.aegis-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.aegis-modal.is-open {
+    display: flex;
+}
+.aegis-modal__mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    animation: aegisMaskIn var(--aw-t-fade, 200ms) var(--aw-ease, ease) forwards;
+}
+.aegis-modal__panel {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 560px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    /* 兜底值：即使宿主页面没有定义这些变量（例如未加载 common.css
+       的工作台页面），面板也必须有实色背景、边框与圆角，
+       绝不能退回 transparent 导致主界面透显叠加。 */
+    background: var(--card-bg, #ffffff);
+    color: var(--text, #2d2d2d);
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: var(--radius-lg, 16px);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    animation: aegisPanelIn var(--aw-t-page, 240ms) var(--aw-ease, ease) forwards;
+    overflow: hidden;
+}
+.aegis-modal--wizard .aegis-modal__panel {
+    max-width: 620px;
+}
+
+/* 小窗口 / 低分辨率：收紧留白，避免内容溢出屏幕 */
+@media (max-width: 560px) {
+    .aegis-modal { padding: 12px; }
+    .aegis-modal__panel { max-height: 92vh; }
+}
+
+@media (max-height: 560px) {
+    .aegis-modal { padding: 12px; }
+    .aegis-modal__panel { max-height: 94vh; }
+}
+
+.aegis-modal__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.aegis-modal__title {
+    flex: 1;
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+.aegis-modal__step {
+    font-size: 12px;
+    color: var(--text-light);
+    white-space: nowrap;
+}
+.aegis-modal__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.aegis-modal__foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px 16px;
+    border-top: 1px solid var(--border);
+}
+.aegis-modal__spacer {
+    flex: 1;
+}
+
+/* ── 表单 ─────────────────────────────────────────────── */
+.aegis-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.aegis-field--inline {
+    gap: 4px;
+}
+.aegis-field__label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.aegis-field__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.aegis-field__row .aegis-input {
+    flex: 1;
+    min-width: 0;
+}
+.aegis-field__hint {
+    font-size: 12px;
+    color: var(--text-light);
+    line-height: 1.5;
+    word-break: break-all;
+}
+.aegis-field__hint a {
+    color: var(--primary);
+}
+
+.aegis-input {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+.aegis-input:focus {
+    border-color: var(--primary);
+}
+.aegis-input:disabled {
+    background: var(--bg-gray);
+    color: var(--text-light);
+}
+.aegis-input--num {
+    max-width: 120px;
+}
+select.aegis-input {
+    cursor: pointer;
+}
+
+.aegis-note {
+    margin: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    background: var(--primary-bg);
+    border-radius: var(--radius-sm);
+}
+.aegis-note[hidden] {
+    display: none;
+}
+
+/* ── 按钮尺寸补充 ─────────────────────────────────────── */
+.aegis-btn-sm {
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.aegis-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+.aegis-icon-btn:hover {
+    background: var(--bg-gray);
+    color: var(--text);
+}
+.aegis-btn-xs {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+}
+.aegis-btn-xs:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── 设置卡片 ─────────────────────────────────────────
+   此前设置页是一长条平铺的表单字段（服务商/模型/Key/高级设置/护栏
+   全部同层堆叠），缺少视觉分组。这里引入卡片容器：
+   每一组配置一个卡片，标题 + 说明 + 内容，层次清晰、可扫读。 */
+.aegis-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+.aegis-card:last-child { margin-bottom: 0; }
+
+/* details 型卡片：折叠时也要有卡片外观 */
+details.aegis-card > summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    list-style: none;
+    margin: -2px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+details.aegis-card > summary::-webkit-details-marker { display: none; }
+details.aegis-card > summary::before {
+    content: B8;
+    color: var(--text-light);
+    transition: transform var(--transition);
+    display: inline-block;
+    font-size: 11px;
+}
+details.aegis-card[open] > summary::before { transform: rotate(90deg); }
+details.aegis-card[open] > summary { margin-bottom: 12px; }
+
+/* 扁平卡片：自带标题栏（服务商区那种非折叠卡片） */
+.aegis-card--flat { padding: 0; overflow: hidden; }
+.aegis-card__head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-gray);
+}
+.aegis-card__title { font-size: 13px; font-weight: 600; color: var(--text); }
+.aegis-card__desc { font-size: 12px; color: var(--text-light); }
+.aegis-card__body { padding: 14px 16px; }
+
+/* ── 高级设置 ─────────────────────────────────────────── */
+.aegis-advanced {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+}
+.aegis-advanced > summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    list-style: none;
+}
+.aegis-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+.aegis-advanced > summary::before {
+    content: "▸ ";
+}
+.aegis-advanced[open] > summary::before {
+    content: "▾ ";
+}
+.aegis-advanced__grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 10px;
+}
+
+/* ── 故障切换链 ───────────────────────────────────────── */
+.aegis-section__head {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.aegis-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.aegis-chain__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+.aegis-chain__no {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #fff;
+    background: var(--primary);
+    border-radius: 50%;
+}
+.aegis-chain__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aegis-chain__ops {
+    display: inline-flex;
+    gap: 4px;
+}
+.aegis-chain__tag {
+    font-size: 11px;
+    color: var(--text-light);
+}
+
+/* ── 状态灯 / 错误卡片 ────────────────────────────────── */
+.aegis-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.aegis-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.aegis-dot--idle { background: var(--text-light); }
+.aegis-dot--busy { background: var(--warning); }
+.aegis-dot--ok { background: var(--success); }
+.aegis-dot--fail { background: var(--danger); }
+
+.aegis-error {
+    padding: 10px 12px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: rgba(239, 68, 68, 0.08);
+}
+.aegis-error__reason {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.aegis-error__action {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.aegis-warn {
+    color: var(--warning) !important;
+}
+
+/* ── 向导步骤条 ───────────────────────────────────────── */
+.aegis-steps {
+    display: flex;
+    gap: 6px;
+    padding: 0 18px;
+}
+.aegis-steps__item {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: var(--transition);
+}
+.aegis-steps__item.is-active { background: var(--primary); }
+.aegis-steps__item.is-done { background: var(--primary-light); }
+
+.aegis-wizard-lead {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+.aegis-wizard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+.aegis-wizard-list li::before {
+    content: "· ";
+    color: var(--primary);
+}
+.aegis-wizard-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* ── 服务商选择卡片 ───────────────────────────────────── */
+.aegis-provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.aegis-provider-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.aegis-provider-item:hover {
+    border-color: var(--primary);
+    background: var(--primary-bg);
+}
+.aegis-provider-item.is-selected {
+    border-color: var(--primary);
+    background: var(--primary-bg);
+}
+.aegis-provider-item__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+.aegis-radio {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: var(--transition);
+}
+.aegis-provider-item.is-selected .aegis-radio {
+    border-color: var(--primary);
+    box-shadow: inset 0 0 0 3px var(--card-bg), inset 0 0 0 8px var(--primary);
+}
+.aegis-provider-item__label {
+    flex: 1;
+    min-width: 0;
+}
+.aegis-provider-item__sub {
+    margin-top: 4px;
+    padding-left: 22px;
+    font-size: 12px;
+    color: var(--text-light);
+    line-height: 1.6;
+}
+.aegis-provider-item__sub a {
+    color: var(--primary);
+}
+.aegis-badge {
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--primary);
+    background: var(--primary-bg);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.aegis-badge--ok {
+    color: var(--success);
+}
+
+/* ── 测试结果 ─────────────────────────────────────────── */
+.aegis-test-result {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-gray);
+}
+.aegis-test-result.is-ok {
+    color: var(--success);
+    border-color: var(--success);
+    background: rgba(16, 163, 127, 0.08);
+}
+.aegis-test-result.is-fail {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+/* ── 窄屏适配 ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+    .aegis-modal {
+        padding: 12px;
+    }
+    .aegis-modal__panel {
+        max-height: 92vh;
+    }
+    .aegis-field__row {
+        flex-wrap: wrap;
+    }
+}
+
+/* ── 弹窗入场动画（遮罩淡入 + 面板轻微缩放/位移）──────────
+   仅 entrance 动画，退出由 display:none 直接收起（不阻塞交互）。
+   时长/缓动复用 workspace.css 的 --aw-* 令牌；降级值保证未加载时也不崩。 */
+@keyframes aegisMaskIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aegisPanelIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ══ 回答限制规则（gd-*）══════════════════════════════════
+   颜色一律复用 common.css 的既有变量（--bg / --border / --primary ...），
+   本段不新增任何 var(--*)，深浅色由 html[data-theme] 自动适配。
+   ═══════════════════════════════════════════════════════ */
+.gd-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 10px;
+}
+.gd-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.gd-subhead {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+}
+.gd-status {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-light);
+    text-align: right;
+}
+
+/* 开关 */
+.gd-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+.gd-switch__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+.gd-switch__track {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 38px;
+    height: 20px;
+    padding: 2px;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    transition: var(--transition);
+}
+.gd-switch__thumb {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background: var(--text-light);
+    border-radius: 50%;
+    transition: var(--transition);
+}
+.gd-switch__input:checked + .gd-switch__track {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+.gd-switch__input:checked + .gd-switch__track .gd-switch__thumb {
+    background: var(--card-bg);
+    transform: translateX(18px);
+}
+.gd-switch__text {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* 列表容器 */
+.gd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.gd-empty {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-light);
+    background: var(--bg-gray);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+}
+
+/* 类别行 */
+.gd-cat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+.gd-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+.gd-cat__label {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.gd-cat__id {
+    font-size: 11px;
+    color: var(--text-light);
+    white-space: nowrap;
+}
+.gd-cat__ops {
+    display: inline-flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.gd-tag {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    font-size: 11px;
+    color: var(--primary);
+    background: var(--primary-bg);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.gd-tag--soft {
+    color: var(--text-secondary);
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+/* 关键词表 */
+.gd-kw-head,
+.gd-kw {
+    display: grid;
+    grid-template-columns: minmax(96px, 1.4fr) 76px 66px minmax(84px, 1fr) 40px 30px;
+    gap: 6px;
+    align-items: center;
+}
+.gd-kw-head {
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--text-light);
+}
+.gd-kw {
+    padding: 6px 8px;
+    background: var(--bg-gray);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+.gd-kw.is-off {
+    opacity: 0.55;
+}
+.gd-kw__word {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.gd-select,
+.gd-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 4px 6px;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+.gd-select {
+    cursor: pointer;
+}
+.gd-select:focus,
+.gd-input:focus {
+    border-color: var(--primary);
+}
+.gd-input--num {
+    text-align: center;
+}
+.gd-checkbox {
+    justify-self: start;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* 批量输入 */
+.gd-textarea {
+    min-height: 78px;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+/* 自检结果 */
+.gd-result {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-line;
+    word-break: break-all;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-gray);
+}
+.gd-result[hidden] {
+    display: none;
+}
+.gd-result.is-ok {
+    color: var(--success);
+    border-color: var(--success);
+    background: rgba(16, 163, 127, 0.08);
+}
+.gd-result.is-fail {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+.gd-file[hidden] {
+    display: none;
+}
+
+/* 窄屏：关键词行折行为两列，避免横向溢出 */
+@media (max-width: 560px) {
+    .gd-kw-head {
+        display: none;
+    }
+    .gd-kw {
+        grid-template-columns: 1fr 1fr;
+    }
+    .gd-kw__word {
+        grid-column: 1 / -1;
+    }
+    .gd-status {
+        text-align: left;
+    }
+}

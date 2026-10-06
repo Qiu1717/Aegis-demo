@@ -1,0 +1,187 @@
+classDiagram
+    class AgentRoutes {
+        +run() Response
+        +approve() Response
+        +cancel() Response
+        +changes() Response
+        +undo() Response
+    }
+    class AgentRunner {
+        -str task_id
+        -int session_id
+        -int step
+        -int max_steps
+        -list messages
+        -Event cancel_event
+        -ChangeSet changeset
+        +run(user_task) Generator
+        -llm_call(messages) LLMReply
+        -exec_tool(call) ToolResult
+        -ask_approval(req) str
+        +cancel() void
+    }
+    class LLMReply {
+        +str text
+        +list tool_calls
+        +str error_code
+        +bool used_native_tools
+    }
+    class ToolCall {
+        +str call_id
+        +str name
+        +dict args
+        +to_event() dict
+        +as_assistant_message() dict
+    }
+    class ToolResult {
+        +str call_id
+        +str tool
+        +bool ok
+        +dict data
+        +dict error
+        +str diff
+        +int elapsed_ms
+        +to_event() dict
+        +as_tool_message() dict
+    }
+    class ToolRegistry {
+        +schemas() list
+        +dispatch(name, args, ctx) ToolResult
+    }
+    class Workspace {
+        -Path root
+        +resolve(rel) Path
+        +is_inside(p) bool
+        +rel(p) str
+        +ignored(name) bool
+    }
+    class FileStore {
+        +read_file(path, start, end) dict
+        +write_file(path, content, task_id) dict
+        +edit_file(path, old, new, task_id) dict
+        +make_diff(old_text, new_text, path) str
+    }
+    class Terminal {
+        +run(command, timeout, task_id) Generator
+        +kill() void
+    }
+    class ApprovalManager {
+        -dict pending
+        +request(task_id, kind, title, detail, diff, dangerous) ApprovalRequest
+        +resolve(request_id, decision) bool
+    }
+    class ApprovalRequest {
+        +str request_id
+        +str kind
+        +str title
+        +str diff
+        +bool dangerous
+        +Event event
+        +str decision
+        +wait(timeout) str
+    }
+    class ChangeSet {
+        +str task_id
+        +list records
+        +add(record) void
+        +undo_all() dict
+        +undo_one(change_id) dict
+    }
+    class ChangeRecord {
+        +int change_id
+        +str path
+        +str action
+        +str backup_path
+        +int bytes
+        +str diff
+    }
+    class AgentTrace {
+        +save_user(session_id, text) int
+        +save_assistant(session_id, text) int
+        +save_tool_call(session_id, call) int
+        +save_tool_result(session_id, result) int
+        +list_messages(session_id) list
+    }
+    class SettingsService {
+        +get_providers() dict
+        +save_providers(payload) dict
+        +test_connection(key, api_key) dict
+        +bootstrap() dict
+        +set_workspace(path) dict
+    }
+    class KeyStore {
+        +save_key(provider_key, secret) bool
+        +load_key(provider_key) str
+        +delete_key(provider_key) bool
+        +backend_name() str
+    }
+    class DpapiBackend {
+        +protect(data) bytes
+        +unprotect(blob) bytes
+    }
+    class KeyringBackend {
+        +set_password(service, user, secret) void
+        +get_password(service, user) str
+    }
+    class ErrorClassifier {
+        +classify(status_or_exc) dict
+    }
+    class Redactor {
+        +register_secret(s) void
+        +scrub(text) str
+    }
+    class LLMClient {
+        +stream_tools(messages, tools) Generator
+        +complete_tools(messages, tools) LLMReply
+        +stream(messages) Generator
+        +build_messages(history, extra) list
+    }
+    class Provider {
+        +str key
+        +str base_url
+        +str model
+        +str api_key
+        +str supports_tools
+        +masked_key() str
+        +availability() tuple
+    }
+    class DesktopApp {
+        +main() void
+        -start_server() int
+        -open_window(url) void
+        -on_closed() void
+    }
+    class LocalServer {
+        +pick_port() int
+        +make_token() str
+        +start(app) void
+        +shutdown() void
+    }
+
+    AgentRoutes --> AgentRunner : 创建并驱动
+    AgentRoutes --> ApprovalManager : resolve
+    AgentRunner --> LLMClient : stream_tools
+    AgentRunner --> ToolRegistry : dispatch
+    AgentRunner --> ApprovalManager : request
+    AgentRunner --> ChangeSet : 记录
+    AgentRunner --> AgentTrace : 落库
+    AgentRunner ..> LLMReply : 产出
+    AgentRunner ..> ToolCall : 解析
+    AgentRunner ..> ToolResult : 回填
+    ToolRegistry ..> Workspace : 路径校验
+    ToolRegistry ..> FileStore : 读写
+    ToolRegistry ..> Terminal : 执行
+    FileStore --> Workspace : 依赖
+    FileStore ..> ChangeRecord : 生成
+    Terminal --> Workspace : cwd
+    ChangeSet o-- ChangeRecord
+    ApprovalManager o-- ApprovalRequest
+    SettingsService --> KeyStore : 存取密钥
+    SettingsService --> Provider : build_provider
+    SettingsService --> LLMClient : reset_client
+    KeyStore <|-- DpapiBackend
+    KeyStore <|-- KeyringBackend
+    SettingsService ..> ErrorClassifier : 测试连接
+    LLMClient --> Provider : 按链切换
+    DesktopApp --> LocalServer : 起停
+    LocalServer --> AgentRoutes : 承载 Flask app

@@ -1,0 +1,1356 @@
+/* =============================================================
+   Aegis 工作台 · 样式
+   -------------------------------------------------------------
+   设计语言：8px 栅格、克制配色、大留白、圆角表面、
+             150ms 悬停过渡、200ms 淡入切换、聚焦主色外发光。
+   变量前缀 --aw-*（避免与 agent.css 的 --ag-* 冲突）。
+   响应式：桌面侧边栏常驻；<=900px 侧边栏转抽屉。
+   ============================================================= */
+
+:root {
+    /* 品牌与语义色 */
+    --aw-primary: #7C3AED;
+    --aw-primary-hover: #6D28D9;
+    --aw-primary-soft: #F5F3FF;
+    --aw-primary-ring: rgba(124, 58, 237, 0.18);
+
+    --aw-explore: #3B82F6;
+    --aw-build: #8B5CF6;
+    --aw-review: #10B981;
+    --aw-fix: #F97316;
+    --aw-danger: #EF4444;
+
+    /* 中性色 */
+    --aw-text: #111827;
+    --aw-text-2: #374151;
+    --aw-text-3: #6B7280;
+    --aw-text-4: #9CA3AF;
+    --aw-border: #E5E7EB;
+    --aw-border-strong: #D1D5DB;
+    --aw-bg: #FFFFFF;
+    --aw-bg-subtle: #F9FAFB;
+    --aw-bg-selected: #F3F4F6;
+    --aw-shadow-card: 0 2px 8px rgba(17, 24, 39, 0.08);
+    --aw-shadow-pop: 0 6px 20px rgba(17, 24, 39, 0.10);
+
+    /* 圆角 */
+    --aw-r-lg: 12px;
+    --aw-r-md: 8px;
+    --aw-r-sm: 6px;
+    --aw-r-full: 999px;
+
+    /* 间距（8px 栅格） */
+    --aw-s1: 4px;
+    --aw-s2: 8px;
+    --aw-s3: 12px;
+    --aw-s4: 16px;
+    --aw-s6: 24px;
+    --aw-s8: 32px;
+
+    /* 动效 */
+    --aw-t-hover: 150ms;
+    --aw-t-fade: 200ms;
+    --aw-t-panel: 220ms;                       /* 展开 / 收起类 */
+    --aw-t-page: 240ms;                        /* 页面 / 视图切换 */
+    --aw-ease: cubic-bezier(0.4, 0, 0.2, 1);   /* 全站统一缓动 */
+
+    /* 字体（离线兜底，不引外部字体） */
+    --aw-font: Inter, "Segoe UI", system-ui, -apple-system,
+               "Microsoft YaHei", "PingFang SC", sans-serif;
+
+    /* ── 兼容层：旧通用变量名 → 工作台 token ──────────────
+       设置弹窗（settings.css + _settings_modal.html）沿用的是 common.css
+       里那套变量名（--card-bg / --bg / --primary …）。工作台页面没有加载
+       common.css，若不在这里映射，弹窗的 background/color/border/radius
+       会因变量取不到值而在计算值阶段失效，表现为面板透明、主界面透显。
+       映射到 --aw-* 还能让弹窗自动跟随深浅主题。 */
+    --primary: var(--aw-primary);
+    --primary-dark: var(--aw-primary-hover);
+    --primary-light: var(--aw-primary);
+    --primary-bg: var(--aw-primary-soft);
+    --success: var(--aw-review);
+    --danger: var(--aw-danger);
+    --warning: var(--aw-fix);
+    --bg: var(--aw-bg);
+    --bg-gray: var(--aw-bg-subtle);
+    --bg-dark: var(--aw-bg-subtle);
+    --sidebar-bg: var(--aw-bg-subtle);
+    --card-bg: var(--aw-bg);
+    --border: var(--aw-border);
+    --border-dark: var(--aw-border-strong);
+    --text: var(--aw-text);
+    --text-secondary: var(--aw-text-3);
+    --text-light: var(--aw-text-4);
+    --text-dark: var(--aw-text);
+    --text-dark-secondary: var(--aw-text-3);
+    --shadow-sm: var(--aw-shadow-card);
+    --shadow: var(--aw-shadow-card);
+    --shadow-lg: var(--aw-shadow-pop);
+    --radius: var(--aw-r-md);
+    --radius-sm: var(--aw-r-sm);
+    --radius-lg: var(--aw-r-lg);
+    --transition: all var(--aw-t-hover) ease;
+}
+
+html[data-theme="dark"] {
+    --aw-text: #E5E7EB;
+    --aw-text-2: #D1D5DB;
+    --aw-text-3: #9CA3AF;
+    --aw-text-4: #6B7280;
+    --aw-border: #2F3135;
+    --aw-border-strong: #3F4247;
+    --aw-bg: #1B1B1D;
+    --aw-bg-subtle: #161618;
+    --aw-bg-selected: #26262A;
+    --aw-primary-soft: #2A2140;
+    --aw-primary-ring: rgba(139, 92, 246, 0.28);
+    --aw-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.40);
+    --aw-shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.50);
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+        --aw-text: #E5E7EB;
+        --aw-text-2: #D1D5DB;
+        --aw-text-3: #9CA3AF;
+        --aw-text-4: #6B7280;
+        --aw-border: #2F3135;
+        --aw-border-strong: #3F4247;
+        --aw-bg: #1B1B1D;
+        --aw-bg-subtle: #161618;
+        --aw-bg-selected: #26262A;
+        --aw-primary-soft: #2A2140;
+        --aw-primary-ring: rgba(139, 92, 246, 0.28);
+        --aw-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.40);
+        --aw-shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.50);
+    }
+}
+
+/* ── 骨架 ───────────────────────────────────────────────── */
+
+html, body { height: 100%; margin: 0; }
+
+body {
+    font-family: var(--aw-font);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--aw-text);
+    background: var(--aw-bg);
+    -webkit-font-smoothing: antialiased;
+}
+
+.aw-app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ── 侧边栏（历史记录）─────────────────────────────────── */
+
+.aw-side {
+    width: 240px;
+    flex: 0 0 240px;
+    display: flex;
+    flex-direction: column;
+    background: var(--aw-bg-subtle);
+    border-right: 1px solid var(--aw-border);
+    overflow: hidden;
+}
+
+.aw-brand {
+    height: 56px;
+    flex: 0 0 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--aw-s2);
+    padding: 0 var(--aw-s4);
+}
+
+.aw-brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--aw-r-sm);
+    background: var(--aw-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.aw-brand-text { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+
+.aw-nav {
+    padding: var(--aw-s2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--aw-s1);
+}
+
+/* 菜单项：高 36px、圆角 8、选中 #F3F4F6 + 2px 主色侧边条 */
+.aw-nav-item {
+    position: relative;
+    height: 36px;
+    border: 0;
+    border-radius: var(--aw-r-md);
+    background: transparent;
+    color: var(--aw-text-2);
+    font-family: inherit;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: var(--aw-s2);
+    padding: 0 var(--aw-s3);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease, color var(--aw-t-hover) ease;
+}
+
+.aw-nav-item:hover { background: var(--aw-bg-selected); color: var(--aw-text); }
+.aw-nav-item.is-active { background: var(--aw-bg-selected); color: var(--aw-text); font-weight: 500; }
+
+.aw-nav-item.is-active::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--aw-primary);
+}
+
+.aw-nav-item svg { flex: 0 0 16px; opacity: 0.8; }
+.aw-nav-item.is-active svg { opacity: 1; color: var(--aw-primary); }
+
+.aw-side-sep { height: 1px; margin: var(--aw-s2) var(--aw-s4); background: var(--aw-border); }
+
+.aw-side-label {
+    padding: var(--aw-s2) var(--aw-s4) var(--aw-s1);
+    font-size: 12px;
+    color: var(--aw-text-4);
+    letter-spacing: 0.4px;
+}
+
+.aw-hist {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.aw-conv-list {
+    padding: var(--aw-s1) var(--aw-s2) var(--aw-s2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--aw-s1);
+}
+
+.aw-conv {
+    position: relative;
+    height: 36px;
+    border-radius: var(--aw-r-md);
+    background: transparent;
+    border: 0;
+    color: var(--aw-text-2);
+    font-family: inherit;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--aw-s3);
+    gap: var(--aw-s2);
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease, color var(--aw-t-hover) ease;
+}
+
+.aw-conv:hover { background: var(--aw-bg-selected); color: var(--aw-text); }
+.aw-conv.is-active { background: var(--aw-bg-selected); color: var(--aw-text); font-weight: 500; }
+
+.aw-conv.is-active::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 8px; bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--aw-primary);
+}
+
+.aw-conv-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aw-conv-more {
+    flex: 0 0 auto;
+    width: 22px; height: 22px;
+    border: 0; border-radius: var(--aw-r-sm);
+    background: transparent; color: var(--aw-text-3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; line-height: 1;
+    cursor: pointer;
+    opacity: 0;   /* 默认隐藏但保留可聚焦性（不用 display:none，保证键盘可达） */
+    transition: background var(--aw-t-hover) ease,
+                color var(--aw-t-hover) ease,
+                opacity var(--aw-t-hover) ease;
+}
+
+/* hover / 选中 / 键盘聚焦时显示三点按钮 */
+.aw-conv:hover .aw-conv-more,
+.aw-conv:focus-within .aw-conv-more,
+.aw-conv.is-active .aw-conv-more { opacity: 1; }
+
+.aw-conv-more:hover { background: var(--aw-border); color: var(--aw-text); }
+.aw-conv-more:focus-visible { opacity: 1; outline: none; box-shadow: 0 0 0 2px var(--aw-primary-ring); }
+
+/* 置顶项小标记 */
+.aw-conv.is-pinned .aw-conv-text::before {
+    content: "\1F4CC";
+    font-size: 10px;
+    margin-right: var(--aw-s1);
+    opacity: 0.9;
+}
+
+.aw-side-empty { padding: var(--aw-s2) var(--aw-s4); font-size: 12px; color: var(--aw-text-4); }
+
+/* ── 三点菜单浮层（position:fixed，避免被侧栏 overflow 裁切）── */
+.aw-menu {
+    position: fixed;
+    z-index: 80;
+    min-width: 152px;
+    padding: var(--aw-s1);
+    background: var(--aw-bg);
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    box-shadow: var(--aw-shadow-pop);
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    transform-origin: top right;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--aw-t-panel) var(--aw-ease),
+                transform var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear var(--aw-t-panel);
+}
+.aw-menu.is-open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity var(--aw-t-panel) var(--aw-ease),
+                transform var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear 0s;
+}
+.aw-menu-item {
+    display: flex; align-items: center;
+    width: 100%;
+    border: 0; background: transparent;
+    color: var(--aw-text-2);
+    font-family: inherit; font-size: 13px;
+    text-align: left;
+    padding: var(--aw-s2) var(--aw-s3);
+    border-radius: var(--aw-r-sm);
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease, color var(--aw-t-hover) ease;
+}
+.aw-menu-item:hover, .aw-menu-item:focus-visible {
+    background: var(--aw-bg-selected); color: var(--aw-text); outline: none;
+}
+.aw-menu-item.is-danger { color: var(--aw-danger); }
+.aw-menu-item.is-danger:hover, .aw-menu-item.is-danger:focus-visible {
+    background: rgba(239, 68, 68, 0.10); color: var(--aw-danger);
+}
+
+/* ── 审批卡片（工具执行需用户确认）────────────────────── */
+.aw-approval {
+    border: 1px solid var(--aw-fix);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    padding: var(--aw-s3);
+    margin: var(--aw-s2) 0;
+    animation: awFade var(--aw-t-panel) var(--aw-ease) both;
+}
+.aw-approval.is-dangerous { border-color: var(--aw-danger); }
+.aw-ap-head {
+    display: flex; align-items: center; gap: var(--aw-s2);
+    margin-bottom: var(--aw-s2);
+}
+.aw-ap-kind {
+    font-size: 11px; padding: 2px 6px;
+    border-radius: var(--aw-r-sm);
+    background: var(--aw-bg-selected); color: var(--aw-text-2);
+    flex: 0 0 auto;
+}
+.aw-ap-title {
+    font-size: 13px; font-weight: 600; color: var(--aw-text);
+    min-width: 0; overflow-wrap: anywhere;
+}
+.aw-ap-warn {
+    font-size: 12px; color: var(--aw-danger);
+    margin-bottom: var(--aw-s2);
+}
+.aw-ap-detail {
+    font-family: var(--aw-font);
+    font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-all;
+    background: var(--aw-bg-selected);
+    border-radius: var(--aw-r-sm);
+    padding: var(--aw-s2);
+    margin: 0 0 var(--aw-s2);
+    max-height: 160px; overflow: auto;
+}
+.aw-ap-actions { display: flex; gap: var(--aw-s2); flex-wrap: wrap; }
+.aw-ap-btn {
+    font-family: inherit; font-size: 12px;
+    padding: 6px 12px; border-radius: var(--aw-r-sm);
+    border: 1px solid var(--aw-border);
+    background: var(--aw-bg); color: var(--aw-text);
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease,
+                border-color var(--aw-t-hover) ease;
+}
+.aw-ap-btn:hover { background: var(--aw-bg-selected); }
+.aw-ap-btn.is-primary {
+    background: var(--aw-primary); border-color: var(--aw-primary); color: #fff;
+}
+.aw-ap-btn.is-primary:hover { background: var(--aw-primary-hover); }
+.aw-ap-btn.is-ghost { background: transparent; }
+.aw-ap-btn.is-danger { color: var(--aw-danger); border-color: var(--aw-danger); }
+.aw-ap-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.aw-approval.is-resolved { opacity: 0.62; }
+.aw-ap-result { font-size: 12px; color: var(--aw-text-2); }
+
+/* ── 可复用：展开 / 收起浮层（菜单、下拉、弹窗共用）──────── */
+.aw-pop {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--aw-t-panel) var(--aw-ease),
+                transform var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear var(--aw-t-panel);
+}
+.aw-pop.is-open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity var(--aw-t-panel) var(--aw-ease),
+                transform var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear 0s;
+}
+
+/* ── 可复用：折叠面板（高度渐变，仅影响自身占位）────────── */
+.aw-collapse {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--aw-t-panel) var(--aw-ease),
+                opacity var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear var(--aw-t-panel);
+    overflow: hidden;
+}
+.aw-collapse.is-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+.aw-collapse > * { overflow: hidden; min-height: 0; }
+
+/* ── 归档分组（可折叠）────────────────────────────────── */
+.aw-arch { flex: 0 0 auto; display: flex; flex-direction: column; }
+.aw-arch[hidden] { display: none; }
+.aw-arch-head {
+    display: flex; align-items: center; gap: var(--aw-s2);
+    height: 32px;
+    border: 0; background: transparent;
+    color: var(--aw-text-3);
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    padding: var(--aw-s1) var(--aw-s4);
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease, color var(--aw-t-hover) ease;
+}
+.aw-arch-head:hover { background: var(--aw-bg-selected); color: var(--aw-text-2); }
+.aw-arch-caret {
+    display: inline-block;
+    width: 0; height: 0;
+    border-left: 4px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform var(--aw-t-panel) var(--aw-ease);
+}
+.aw-arch.is-collapsed .aw-arch-caret { transform: rotate(-90deg); }
+.aw-arch-title { flex: 1 1 auto; text-align: left; letter-spacing: 0.3px; }
+.aw-arch-count {
+    flex: 0 0 auto;
+    min-width: 18px; height: 18px;
+    padding: 0 5px;
+    border-radius: var(--aw-r-full);
+    background: var(--aw-bg-selected);
+    color: var(--aw-text-3);
+    font-size: 11px; line-height: 18px; text-align: center;
+}
+.aw-arch-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows var(--aw-t-panel) var(--aw-ease),
+                opacity var(--aw-t-panel) var(--aw-ease),
+                visibility 0s linear var(--aw-t-panel);
+    overflow: hidden;
+}
+.aw-arch.is-collapsed .aw-arch-body {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+.aw-arch-inner {
+    overflow: hidden; min-height: 0;
+    display: flex; flex-direction: column; gap: var(--aw-s1);
+    padding: 0 var(--aw-s2) var(--aw-s2);
+}
+
+.aw-side-foot {
+    flex: 0 0 auto;
+    padding: var(--aw-s3) var(--aw-s4);
+    border-top: 1px solid var(--aw-border);
+    display: flex; flex-direction: column; gap: var(--aw-s2);
+}
+
+.aw-chip {
+    display: inline-flex; align-items: center; gap: var(--aw-s1);
+    max-width: 100%;
+    padding: 2px var(--aw-s2);
+    border-radius: var(--aw-r-sm);
+    background: var(--aw-bg-selected);
+    color: var(--aw-text-3);
+    font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── 主区 ───────────────────────────────────────────────── */
+
+.aw-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.aw-scroll { flex: 1 1 auto; overflow-y: auto; }
+.aw-inner { max-width: 800px; margin: 0 auto; padding: 80px var(--aw-s6) var(--aw-s6); }
+
+.aw-view { display: none; }
+.aw-view.is-active { display: block; animation: awFade var(--aw-t-page) var(--aw-ease) forwards; }
+
+@keyframes awFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.aw-title { margin: 0 0 var(--aw-s2); font-size: 24px; font-weight: 600; letter-spacing: -0.2px; }
+.aw-sub { margin: 0 0 var(--aw-s6); font-size: 14px; color: var(--aw-text-3); }
+
+/* ── 顶栏（智能体配置入口）─────────────────────────────── */
+
+.aw-topbar {
+    flex: 0 0 auto;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--aw-s2);
+    padding: 0 var(--aw-s4);
+    border-bottom: 1px solid var(--aw-border);
+    background: var(--aw-bg);
+}
+
+.aw-topbar-left { display: flex; align-items: center; gap: var(--aw-s2); min-width: 0; }
+.aw-topbar-title { font-size: 15px; font-weight: 500; }
+.aw-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--aw-s2); }
+
+.aw-menu-btn {
+    display: none;
+    width: 32px; height: 32px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+    align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease;
+}
+
+.aw-menu-btn:hover { background: var(--aw-bg-selected); }
+
+.aw-select {
+    height: 32px;
+    max-width: 160px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 0 var(--aw-s2);
+    cursor: pointer;
+    transition: border-color var(--aw-t-hover) ease, box-shadow var(--aw-t-hover) ease;
+}
+
+.aw-select:focus {
+    outline: none;
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+/* 状态胶囊 */
+.aw-status {
+    display: inline-flex; align-items: center; gap: var(--aw-s1);
+    padding: 2px var(--aw-s2);
+    border-radius: var(--aw-r-full);
+    font-size: 12px;
+    background: var(--aw-bg-selected);
+    color: var(--aw-text-3);
+    transition: background var(--aw-t-hover) ease, color var(--aw-t-hover) ease;
+}
+
+.aw-status[data-state="running"] { background: var(--aw-primary-soft); color: var(--aw-primary); }
+.aw-status[data-state="done"]    { background: rgba(16,185,129,0.12); color: var(--aw-review); }
+.aw-status[data-state="failed"]  { background: rgba(239,68,68,0.12); color: var(--aw-danger); }
+.aw-status[data-state="paused"]  { background: rgba(249,115,22,0.12); color: var(--aw-fix); }
+
+.aw-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ── 入口卡片 ───────────────────────────────────────────── */
+
+.aw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--aw-s4); }
+
+.aw-card {
+    min-height: 120px;
+    box-sizing: border-box;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-lg);
+    background: var(--aw-bg);
+    padding: var(--aw-s4);
+    display: flex; flex-direction: column; gap: var(--aw-s2);
+    text-align: left; cursor: pointer;
+    transition: border-color var(--aw-t-hover) ease,
+                box-shadow var(--aw-t-hover) ease,
+                transform var(--aw-t-hover) ease;
+}
+
+.aw-card:hover {
+    border-color: var(--aw-border-strong);
+    box-shadow: var(--aw-shadow-card);
+    transform: translateY(-2px);
+}
+
+/* 按下：立刻给出「已响应」的物理反馈，不等 click 后的异步过程。
+   缺这一态时用户会以为卡片没生效（实际 prompt 已填入）。 */
+.aw-card:active {
+    transform: translateY(0) scale(0.985);
+    box-shadow: none;
+    border-color: var(--aw-primary);
+    transition: transform 80ms ease, box-shadow 80ms ease, border-color 80ms ease;
+}
+
+.aw-card:focus-visible {
+    outline: none;
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+/* 已发送过该类型：标记为「已选」，避免重复点同一个入口 */
+.aw-card.is-selected {
+    border-color: var(--aw-primary);
+    background: var(--aw-primary-soft);
+}
+.aw-card.is-selected .aw-card-name { color: var(--aw-primary-hover); }
+
+/* 运行中：卡片不可再点（同一轮任务进行中重复发起会中止上一轮） */
+.aw-card.is-busy {
+    cursor: progress;
+    opacity: 0.72;
+    transform: none;
+    box-shadow: none;
+}
+.aw-card.is-busy:hover { transform: none; border-color: var(--aw-border); box-shadow: none; }
+
+/* 无工作区：编码类卡片（构建/修复/审查）无法执行，禁用并说明原因 */
+.aw-card[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+    transform: none;
+    box-shadow: none;
+    background: var(--aw-bg-subtle);
+}
+.aw-card[aria-disabled="true"]:hover {
+    transform: none;
+    border-color: var(--aw-border);
+    box-shadow: none;
+}
+
+/* 卡片内的迷你进度条：仅在 loading 态出现 */
+.aw-card-bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 0 0 var(--aw-r-lg) var(--aw-r-lg);
+    background: var(--aw-primary-ring);
+    opacity: 0;
+    transition: opacity 150ms ease;
+    pointer-events: none;
+}
+.aw-card { position: relative; overflow: hidden; }
+.aw-card.is-loading .aw-card-bar { opacity: 1; }
+.aw-card-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--aw-primary);
+    transform: translateX(-100%);
+    animation: awCardSlide 1.1s ease-in-out infinite;
+}
+@keyframes awCardSlide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .aw-card-bar::after { animation: none; transform: none; opacity: 0.5; }
+    .aw-card:active { transform: none; }
+}
+
+.aw-card-mark {
+    width: 28px; height: 28px;
+    border-radius: var(--aw-r-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+}
+
+.aw-card[data-kind="explore"] .aw-card-mark { background: var(--aw-explore); }
+.aw-card[data-kind="build"]   .aw-card-mark { background: var(--aw-build); }
+.aw-card[data-kind="review"]  .aw-card-mark { background: var(--aw-review); }
+.aw-card[data-kind="fix"]     .aw-card-mark { background: var(--aw-fix); }
+
+.aw-card-name { font-size: 14px; font-weight: 500; color: var(--aw-text); }
+.aw-card-desc { font-size: 12px; color: var(--aw-text-3); line-height: 1.5; }
+
+/* 状态角标：把「这一轮怎么结束的」显式画在卡片上，
+   避免停止后卡片仍留着转圈的进度条 —— 那是「界面在跑」的假象。
+   文案与真实请求状态一一对应：running / stopped / done / failed。 */
+.aw-card-state {
+    position: absolute;
+    top: var(--aw-s3); right: var(--aw-s3);
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: var(--aw-r-full);
+    opacity: 0;
+    transition: opacity 150ms ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+.aw-card[data-run-state="running"] .aw-card-state,
+.aw-card[data-run-state="stopped"] .aw-card-state,
+.aw-card[data-run-state="done"] .aw-card-state,
+.aw-card[data-run-state="failed"] .aw-card-state,
+.aw-card[data-run-state="armed"] .aw-card-state { opacity: 1; }
+
+.aw-card[data-run-state="running"] .aw-card-state {
+    background: var(--aw-primary-soft); color: var(--aw-primary-hover);
+}
+/* 待发送：与「已停止」明确区分开 —— 主色描边、浅底，表示「等你确认」 */
+.aw-card[data-run-state="armed"] .aw-card-state {
+    background: transparent;
+    color: var(--aw-primary-hover);
+    box-shadow: inset 0 0 0 1px var(--aw-primary-ring);
+}
+.aw-card[data-run-state="stopped"] .aw-card-state {
+    background: #FEF3C7; color: #92400E;
+}
+.aw-card[data-run-state="done"] .aw-card-state {
+    background: #DCFCE7; color: #166534;
+}
+.aw-card[data-run-state="failed"] .aw-card-state {
+    background: #FEE2E2; color: #991B1B;
+}
+
+/* ── 失败重试条 ─────────────────────────────────────── */
+.aw-retry {
+    display: flex; align-items: center; gap: var(--aw-s3);
+    margin-top: var(--aw-s4);
+    padding: var(--aw-s3) var(--aw-s4);
+    border: 1px solid var(--aw-border);
+    border-left: 3px solid var(--aw-danger);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg-subtle);
+}
+.aw-retry-text { flex: 1 1 auto; font-size: 13px; color: var(--aw-text-2); }
+.aw-retry-btn { flex: 0 0 auto; }
+.aw-retry-btn:active { transform: scale(0.97); }
+
+/* ── 生成中指示 ─────────────────────────────────────── */
+.aw-busy {
+    display: flex; align-items: center; gap: var(--aw-s2);
+    margin-top: var(--aw-s3);
+    padding: var(--aw-s2) var(--aw-s3);
+    font-size: 13px; color: var(--aw-text-2);
+}
+.aw-busy-dots { display: inline-flex; gap: 3px; }
+.aw-busy-dots i {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--aw-primary);
+    animation: awDot 1.2s ease-in-out infinite;
+}
+.aw-busy-dots i:nth-child(2) { animation-delay: 0.15s; }
+.aw-busy-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes awDot {
+    0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+    30%           { opacity: 1;    transform: translateY(-2px); }
+}
+.aw-busy-text { flex: 1 1 auto; }
+.aw-busy-stop {
+    flex: 0 0 auto;
+    border: 1px solid var(--aw-border-strong);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: var(--aw-r-sm);
+    cursor: pointer;
+}
+.aw-busy-stop:hover { border-color: var(--aw-danger); color: var(--aw-danger); }
+@media (prefers-reduced-motion: reduce) {
+    .aw-busy-dots i { animation: none; opacity: 0.6; }
+}
+
+/* ── 技能浮层 ───────────────────────────────────────── */
+.aw-modal { position: fixed; inset: 0; z-index: 60; }
+.aw-modal[hidden] { display: none; }
+.aw-modal-mask { position: absolute; inset: 0; background: rgba(17, 24, 39, 0.32); }
+.aw-modal-panel {
+    position: relative;
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(70vh, 560px);
+    margin: 10vh auto 0;
+    display: flex; flex-direction: column;
+    background: var(--aw-bg);
+    border-radius: var(--aw-r-lg);
+    box-shadow: var(--aw-shadow-pop);
+    overflow: hidden;
+}
+.aw-modal-head {
+    display: flex; align-items: center;
+    padding: var(--aw-s3) var(--aw-s4);
+    border-bottom: 1px solid var(--aw-border);
+}
+.aw-modal-title { flex: 1 1 auto; font-size: 14px; font-weight: 500; }
+.aw-modal-close {
+    border: none; background: transparent; cursor: pointer;
+    font-size: 20px; line-height: 1; color: var(--aw-text-3);
+    padding: 0 4px; border-radius: var(--aw-r-sm);
+}
+.aw-modal-close:hover { color: var(--aw-text); background: var(--aw-bg-subtle); }
+.aw-modal-body { flex: 1 1 auto; overflow-y: auto; padding: var(--aw-s4); }
+.aw-skill-loading { font-size: 13px; color: var(--aw-text-3); padding: var(--aw-s3) 0; }
+.aw-skill-list { display: flex; flex-direction: column; gap: var(--aw-s2); }
+.aw-skill-item {
+    display: flex; align-items: flex-start; gap: var(--aw-s3);
+    padding: var(--aw-s3);
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+}
+.aw-skill-item.is-off { opacity: 0.55; }
+.aw-skill-main { flex: 1 1 auto; min-width: 0; }
+.aw-skill-name { font-size: 13px; font-weight: 500; }
+.aw-skill-desc {
+    font-size: 12px; color: var(--aw-text-3); line-height: 1.5;
+    margin-top: 2px; overflow-wrap: anywhere;
+}
+.aw-skill-toggle {
+    flex: 0 0 auto; cursor: pointer;
+    border: 1px solid var(--aw-border-strong);
+    background: var(--aw-bg); color: var(--aw-text-2);
+    font-size: 12px; padding: 3px 12px; border-radius: var(--aw-r-sm);
+    min-width: 56px;
+}
+.aw-skill-toggle.is-on { border-color: var(--aw-primary); color: var(--aw-primary); background: var(--aw-primary-soft); }
+.aw-skill-toggle:disabled { cursor: progress; opacity: 0.6; }
+.aw-skill-empty { font-size: 13px; color: var(--aw-text-3); padding: var(--aw-s3) 0; }
+
+/* ── 模态确认卡片（工作台专用）───────────────────────────
+   common.js 的 showConfirm 用的是 .modal-overlay/.modal-box，
+   但那套样式定义在 common.css 里，而本页只引了 workspace.css +
+   settings.css —— 于是弹层被渲染成普通文档流元素，挤在页面下方、
+   需手动下滑才可见，且毫无卡片外观（缺陷2）。
+
+   这里补一套工作台风格的模态：变量沿用 --aw-* 体系，视觉与侧边栏、
+   设置弹窗保持一致（12px 圆角、0.5px 描边、--aw-shadow-pop 阴影）。
+   用 .aw-confirm-* 前缀避免与 common.css 的 .modal-* 冲突。 */
+.aw-confirm-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.4);
+    /* 高于技能浮层(60)与三点菜单，确保确认框永远在最上层 */
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--aw-s4);
+    /* 滚动时保持固定：fixed + inset 0 已保证，另加 overscroll 防止滚穿 */
+    overscroll-behavior: contain;
+}
+
+.aw-confirm-card {
+    width: min(420px, 100%);
+    background: var(--aw-bg);
+    border: 0.5px solid var(--aw-border);
+    border-radius: var(--aw-r-lg);
+    box-shadow: var(--aw-shadow-pop);
+    padding: var(--aw-s6) var(--aw-s6) var(--aw-s4);
+    animation: awConfirmIn 160ms ease;
+}
+@keyframes awConfirmIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .aw-confirm-card { animation: none; }
+}
+
+.aw-confirm-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--aw-text);
+    margin-bottom: var(--aw-s2);
+}
+.aw-confirm-msg {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--aw-text-2);
+    overflow-wrap: anywhere;
+}
+.aw-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--aw-s2);
+    margin-top: var(--aw-s4);
+}
+/* 危险操作的主按钮（删除）用红色，与设置页 danger 风格一致 */
+.aw-confirm-btn {
+    height: 32px;
+    padding: 0 var(--aw-s4);
+    border-radius: var(--aw-r-md);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--aw-border);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+}
+.aw-confirm-btn:hover { border-color: var(--aw-border-strong); background: var(--aw-bg-subtle); }
+.aw-confirm-btn:active { transform: scale(0.98); }
+.aw-confirm-btn:focus-visible {
+    outline: none;
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+.aw-confirm-btn.is-danger {
+    border-color: var(--aw-danger);
+    background: var(--aw-danger);
+    color: #fff;
+}
+.aw-confirm-btn.is-danger:hover { background: #DC2626; border-color: #DC2626; }
+
+/* ── [hidden] 全局兜底 ──────────────────────────────────────
+   HTML 的 hidden 属性本质是 UA 样式表里的 [hidden]{display:none}，
+   **任何显式设置 display 的类选择器都会覆盖它**（两者特异性都是 0,1,0，
+   按源码顺序决胜）。本页 .aw-retry / .aw-busy / .aw-task 都设了
+   display:flex，而它们身上没有 [hidden] 变体 → hidden 属性形同虚设，
+   于是「上一轮未完成」卡片在首屏常驻、生成中指示条永不消失（缺陷1、4）。
+
+   这条兜底放在所有组件样式**之后**，特异性 (0,1,0) 与组件类相同但顺序更靠后，
+   因此能可靠地让 hidden 生效；不影响任何未使用 hidden 的元素。
+
+   .aw-task 的 display 规则出现在本段之后（L1006），故这里多写一个
+   .aw-view .aw-task[hidden] 提高特异性到 (0,2,0)，不依赖源码顺序。 */
+.aw-retry[hidden],
+.aw-busy[hidden],
+.aw-card-state[hidden] { display: none; }
+.aw-view .aw-task[hidden] { display: none; }
+
+/* ── 消息流 ─────────────────────────────────────────────── */
+
+.aw-msgs { display: flex; flex-direction: column; gap: var(--aw-s4); }
+.aw-msg { display: flex; gap: var(--aw-s3); }
+
+.aw-msg-avatar {
+    flex: 0 0 28px; width: 28px; height: 28px;
+    border-radius: var(--aw-r-full);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500; color: #fff;
+    background: var(--aw-text-4);
+}
+
+.aw-msg[data-role="user"] .aw-msg-avatar { background: var(--aw-text-2); }
+.aw-msg[data-role="assistant"] .aw-msg-avatar { background: var(--aw-primary); }
+
+.aw-msg-body { flex: 1 1 auto; min-width: 0; }
+.aw-msg-role { font-size: 12px; color: var(--aw-text-4); margin-bottom: var(--aw-s1); }
+.aw-msg-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--aw-text); }
+.aw-msg-text.is-error { color: var(--aw-danger); }
+
+.aw-typing {
+    display: inline-block;
+    width: 6px; height: 14px; margin-left: 2px;
+    border-radius: 1px; background: var(--aw-primary);
+    vertical-align: text-bottom;
+    animation: awBlink 1s steps(2, start) infinite;
+}
+
+@keyframes awBlink { to { visibility: hidden; } }
+
+/* ── 任务执行卡片 ───────────────────────────────────────── */
+
+.aw-task {
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-lg);
+    background: var(--aw-bg);
+    margin-bottom: var(--aw-s4);
+    overflow: hidden;
+}
+
+.aw-task-head {
+    display: flex; align-items: center; gap: var(--aw-s2);
+    padding: var(--aw-s3) var(--aw-s4);
+    border-bottom: 1px solid var(--aw-border);
+}
+
+.aw-task-title { font-size: 13px; font-weight: 500; flex: 1 1 auto; min-width: 0;
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-task-meta { font-size: 12px; color: var(--aw-text-4); }
+
+.aw-task-body { padding: var(--aw-s3) var(--aw-s4); display: flex; flex-direction: column; gap: var(--aw-s2); }
+
+.aw-step {
+    display: flex; gap: var(--aw-s2);
+    font-size: 13px; color: var(--aw-text-2);
+    padding: 2px 0;
+}
+
+.aw-step-idx { flex: 0 0 auto; color: var(--aw-text-4); font-variant-numeric: tabular-nums; }
+.aw-step-text { min-width: 0; overflow-wrap: anywhere; }
+
+.aw-tool {
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    padding: var(--aw-s2) var(--aw-s3);
+    background: var(--aw-bg-subtle);
+    font-size: 12px;
+}
+
+.aw-tool-name { color: var(--aw-primary); font-weight: 500; }
+.aw-tool-cmd {
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    color: var(--aw-text-2);
+    overflow-wrap: anywhere;
+    margin-top: 2px;
+}
+.aw-tool-out {
+    margin-top: var(--aw-s2);
+    color: var(--aw-text-3);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.aw-task-empty { font-size: 12px; color: var(--aw-text-4); }
+
+/* ── 底部输入区 ─────────────────────────────────────────── */
+
+.aw-composer-wrap {
+    flex: 0 0 auto;
+    padding: var(--aw-s3) var(--aw-s6) var(--aw-s6);
+    background: linear-gradient(to top, var(--aw-bg) 70%, transparent);
+}
+
+.aw-composer-inner { max-width: 800px; margin: 0 auto; }
+
+.aw-composer {
+    min-height: 56px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-lg);
+    background: var(--aw-bg);
+    padding: var(--aw-s2) var(--aw-s3);
+    display: flex; flex-direction: column; gap: var(--aw-s2);
+    transition: border-color var(--aw-t-hover) ease, box-shadow var(--aw-t-hover) ease;
+}
+
+.aw-composer:focus-within {
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+.aw-composer-input {
+    flex: 1 1 auto;
+    min-height: 24px; max-height: 200px;
+    border: 0; outline: none; resize: none;
+    background: transparent; color: var(--aw-text);
+    font-family: inherit; font-size: 14px; line-height: 1.6; padding: 0;
+}
+
+.aw-composer-input::placeholder { color: var(--aw-text-4); }
+
+/* 输入区行：工作区按钮固定在左上角，输入区自适应剩余宽度。
+   align-items:flex-start 保证 textarea 自动增高（内容变长）时按钮仍顶部对齐不错位；
+   min-width:0 防止长内容把按钮挤变形。 */
+.aw-composer-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--aw-s2);
+}
+
+.aw-composer-row .aw-composer-input { min-width: 0; }
+
+/* 工作区入口按钮：与界面统一的图标按钮，含悬停 / 按下 / 聚焦反馈 */
+.aw-composer-btn {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    color: var(--aw-text-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease,
+                border-color var(--aw-t-hover) ease,
+                color var(--aw-t-hover) ease,
+                transform var(--aw-t-hover) ease;
+}
+
+.aw-composer-btn:hover {
+    background: var(--aw-bg-selected);
+    border-color: var(--aw-border-strong);
+    color: var(--aw-text);
+}
+
+.aw-composer-btn:active { transform: scale(0.94); }
+
+.aw-composer-btn:focus-visible {
+    outline: none;
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+/* 「新对话」入口已移除，发送按钮靠右对齐，输入区只保留用户输入与发送按钮 */
+.aw-composer-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--aw-s2);
+}
+.aw-composer-bar .aw-chip { flex: 1 1 auto; min-width: 0; }
+
+/* 联网搜索开关：胶囊形状的一次性开关，图标 + 文案 + 状态点。
+   开启态用主色描边 + 浅底 + 主色圆点（与「开 / 关」语义一致），
+   关闭态回到中性灰；所有取值都在 :root 里有定义。 */
+.aw-web-toggle {
+    flex: 0 0 auto;
+    margin-right: auto;               /* 把发送按钮顶到最右 */
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-full);
+    background: var(--aw-bg);
+    color: var(--aw-text-3);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--aw-t-hover) ease,
+                border-color var(--aw-t-hover) ease,
+                color var(--aw-t-hover) ease;
+}
+
+.aw-web-toggle svg { flex: 0 0 auto; }
+
+.aw-web-toggle:hover {
+    background: var(--aw-bg-selected);
+    border-color: var(--aw-border-strong);
+    color: var(--aw-text);
+}
+
+.aw-web-toggle:focus-visible {
+    outline: none;
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+.aw-web-toggle.is-on {
+    border-color: var(--aw-primary);
+    background: var(--aw-primary-soft);
+    color: var(--aw-primary);
+}
+
+.aw-web-toggle.is-on:hover {
+    border-color: var(--aw-primary-hover);
+    color: var(--aw-primary-hover);
+}
+
+/* 开启态末尾的状态点（7px，不占布局抖动：始终保留位置） */
+.aw-web-toggle::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-left: 2px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background var(--aw-t-hover) ease;
+}
+
+.aw-web-toggle.is-on::after { background: var(--aw-primary); }
+
+.aw-send {
+    flex: 0 0 auto; width: 32px; height: 32px;
+    border: 0; border-radius: var(--aw-r-full);
+    background: var(--aw-primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease,
+                opacity var(--aw-t-hover) ease,
+                transform var(--aw-t-hover) ease;
+}
+
+.aw-send:hover:not(:disabled) { background: var(--aw-primary-hover); transform: scale(1.06); }
+.aw-send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 生成中：发送按钮转为「停止」语义（方形图标 + 中性色），
+   让「停止」这件事在主操作位上可达，不必去点提示条里的小字。 */
+.aw-send.is-stop {
+    background: var(--aw-text-2);
+    opacity: 1;
+    cursor: pointer;
+}
+.aw-send.is-stop svg { display: none; }
+.aw-send.is-stop::before {
+    content: "";
+    width: 10px; height: 10px;
+    background: #fff;
+    border-radius: 2px;
+}
+.aw-send.is-stop:hover { background: var(--aw-danger); transform: scale(1.06); }
+
+.aw-composer-hint { padding: 0 var(--aw-s3); margin-top: var(--aw-s2); font-size: 12px; color: var(--aw-text-4); }
+
+/* ── 按钮 ───────────────────────────────────────────────── */
+
+.aw-btn {
+    height: 32px;
+    border-radius: var(--aw-r-md);
+    border: 1px solid var(--aw-border);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+    font-family: inherit; font-size: 13px;
+    padding: 0 var(--aw-s3);
+    display: inline-flex; align-items: center; gap: var(--aw-s2);
+    cursor: pointer;
+    transition: background var(--aw-t-hover) ease,
+                border-color var(--aw-t-hover) ease,
+                color var(--aw-t-hover) ease;
+}
+
+.aw-btn:hover { background: var(--aw-bg-selected); border-color: var(--aw-border-strong); color: var(--aw-text); }
+
+.aw-btn-primary {
+    background: var(--aw-primary);
+    border-color: var(--aw-primary);
+    color: #fff;
+}
+
+.aw-btn-primary:hover {
+    background: var(--aw-primary-hover);
+    border-color: var(--aw-primary-hover);
+    color: #fff;
+}
+
+.aw-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.aw-btn-danger { color: var(--aw-danger); }
+
+.aw-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.10);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--aw-danger);
+}
+
+/* ── 抽屉遮罩 ───────────────────────────────────────────── */
+
+.aw-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.45);
+    z-index: 40;
+}
+
+.aw-overlay.is-on { display: block; }
+
+/* ── 提示条 ─────────────────────────────────────────────── */
+
+.aw-toast {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translateX(-50%);
+    background: var(--aw-text); color: var(--aw-bg);
+    font-size: 13px;
+    padding: var(--aw-s2) var(--aw-s4);
+    border-radius: var(--aw-r-md);
+    box-shadow: var(--aw-shadow-pop);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--aw-t-fade) ease;
+    z-index: 60;
+}
+
+.aw-toast.is-on { opacity: 1; }
+
+/* ── 响应式：<=900px 侧边栏转抽屉 ───────────────────────── */
+
+@media (max-width: 900px) {
+    .aw-side {
+        position: fixed;
+        top: 0; bottom: 0; left: 0;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform var(--aw-t-fade) ease;
+        box-shadow: var(--aw-shadow-pop);
+    }
+
+    .aw-side.is-open { transform: none; }
+
+    .aw-menu-btn { display: flex; }
+
+    .aw-inner { padding: var(--aw-s6) var(--aw-s4) var(--aw-s4); }
+    .aw-composer-wrap { padding: var(--aw-s3) var(--aw-s4) var(--aw-s4); }
+    .aw-topbar { padding: 0 var(--aw-s3); }
+
+    .aw-topbar-right .aw-select { max-width: 110px; }
+    .aw-topbar-right .aw-btn-hide-sm { display: none; }
+
+    .aw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+    .aw-cards { grid-template-columns: 1fr; }
+    .aw-title { font-size: 20px; }
+    .aw-topbar-title { display: none; }
+    /* 窄屏只保留放大镜图标，文案让位给输入框 */
+    .aw-web-toggle { padding: 0 8px; }
+    .aw-web-toggle span { display: none; }
+}
+
+/* ── 降低动效偏好 ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -1,0 +1,222 @@
+/* ============================================================
+   AI聊天窗口 — ChatGPT 风格（iframe 内嵌）
+   无气泡，全宽消息块
+   ============================================================ */
+.chat-window {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: #ffffff;
+}
+
+/* ── 顶部标题栏 ───────────────────────────────────── */
+.chat-header {
+    height: 52px;
+    padding: 0 24px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+.chat-header-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+.chat-model-tag {
+    font-size: 12px;
+    color: var(--text-light);
+    background: var(--bg-gray);
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+/* ── 消息列表区 ───────────────────────────────────── */
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+}
+.chat-messages-inner {
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 24px 24px 48px;
+}
+
+/* 消息块（无气泡） */
+.msg {
+    margin-bottom: 0;
+    padding: 20px 0;
+    animation: fadeIn 0.25s ease;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+.msg.user {
+    background: var(--bg-gray);
+    padding: 20px 24px;
+    margin: 0 -24px;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.msg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    font-weight: 600;
+}
+.msg-avatar.ai {
+    background: var(--primary);
+    color: #fff;
+}
+.msg-avatar.user {
+    background: #6b6b6b;
+    color: #fff;
+}
+
+.msg-body {
+    flex: 1;
+    min-width: 0;
+    margin-top: 2px;
+}
+.msg-content {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+/* 违规消息 */
+.msg-blocked .msg-content {
+    color: #c2410c;
+}
+.msg-blocked .msg-content::before {
+    content: '⚠ ';
+}
+
+/* 打字光标 */
+.typing-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 16px;
+    background: var(--primary);
+    border-radius: 1px;
+    animation: blink 0.9s infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 加载态 */
+.loading-dots { display: flex; gap: 4px; padding: 4px 0; }
+.loading-dots span {
+    width: 7px; height: 7px;
+    background: var(--text-light);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
+}
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes bounce {
+    0%, 80%, 100% { transform: scale(0.5); opacity: 0.3; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+/* ── 空状态 ─────────────────────────────────────── */
+.chat-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 24px;
+    gap: 12px;
+}
+.chat-empty-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #fff;
+}
+.chat-empty-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+}
+.chat-empty-subtitle {
+    font-size: 15px;
+    color: var(--text-secondary);
+}
+
+/* ── 输入区 ─────────────────────────────────────── */
+.chat-input-area {
+    padding: 12px 24px 20px;
+    background: #fff;
+    flex-shrink: 0;
+}
+.chat-input-inner {
+    max-width: 768px;
+    margin: 0 auto;
+    position: relative;
+}
+.chat-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 52px 14px 18px;
+    font-size: 15px;
+    resize: none;
+    max-height: 200px;
+    min-height: 52px;
+    line-height: 1.6;
+    transition: var(--transition);
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+}
+.chat-input:focus {
+    border-color: #c5c5c5;
+    box-shadow: var(--shadow);
+}
+.chat-send-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 36px;
+    height: 36px;
+    background: var(--primary);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: var(--transition);
+    cursor: pointer;
+    border: none;
+    flex-shrink: 0;
+}
+.chat-send-btn:hover { background: var(--primary-dark); }
+.chat-send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.chat-input-hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-top: 8px;
+}

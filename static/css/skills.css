@@ -1,0 +1,203 @@
+/* =============================================================
+   技能中心 · 样式
+   -------------------------------------------------------------
+   刻意复用工作台（workspace.css）的 --aw-* 设计 token，
+   保证「工作台 ↔ 技能中心」来回切换时视觉与交互完全一致。
+   ============================================================= */
+
+.sk-page {
+    min-height: 100vh;
+    background: var(--aw-bg);
+    padding: var(--aw-s8) var(--aw-s6) var(--aw-s8);
+    box-sizing: border-box;
+}
+
+.sk-wrap {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--aw-s6);
+}
+
+/* ── 页头 ───────────────────────────────────────────────── */
+
+.sk-head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--aw-s4);
+    flex-wrap: wrap;
+}
+
+.sk-head-text { flex: 1 1 auto; min-width: 0; }
+
+.sk-title {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin-bottom: var(--aw-s2);
+}
+
+.sk-sub { font-size: 13px; color: var(--aw-text-3); line-height: 1.6; }
+
+/* ── 区块卡片 ───────────────────────────────────────────── */
+
+.sk-section {
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-lg);
+    background: var(--aw-bg);
+    padding: var(--aw-s4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--aw-s3);
+}
+
+.sk-section-title { font-size: 14px; font-weight: 500; color: var(--aw-text); }
+.sk-hint { font-size: 12px; color: var(--aw-text-3); line-height: 1.6; margin: 0; }
+
+/* ── 技能列表 ───────────────────────────────────────────── */
+
+.sk-list { display: flex; flex-direction: column; gap: var(--aw-s2); }
+
+.sk-row {
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    padding: var(--aw-s3);
+    display: flex;
+    align-items: center;
+    gap: var(--aw-s3);
+    transition: border-color var(--aw-t-hover) ease, box-shadow var(--aw-t-hover) ease;
+}
+
+.sk-row:hover {
+    border-color: var(--aw-border-strong);
+    box-shadow: var(--aw-shadow-card);
+}
+
+.sk-row.is-on { border-color: rgba(16, 185, 129, 0.35); }
+
+.sk-main { flex: 1 1 auto; min-width: 0; }
+
+.sk-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--aw-text);
+    overflow-wrap: anywhere;
+}
+
+.sk-desc {
+    font-size: 12px;
+    color: var(--aw-text-3);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    margin-top: 2px;
+}
+
+.sk-ctrl { flex: 0 0 auto; display: flex; align-items: center; gap: var(--aw-s2); }
+
+.sk-badge {
+    font-size: 11px;
+    padding: 2px var(--aw-s2);
+    border-radius: var(--aw-r-full);
+    background: var(--aw-bg-selected);
+    color: var(--aw-text-3);
+    white-space: nowrap;
+}
+
+.sk-badge.is-builtin { background: var(--aw-primary-soft); color: var(--aw-primary); }
+.sk-badge.is-on { background: rgba(16, 185, 129, 0.12); color: var(--aw-review); }
+.sk-badge.is-off { background: var(--aw-bg-selected); color: var(--aw-text-4); }
+
+/* ── 表单 ───────────────────────────────────────────────── */
+
+.sk-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--aw-text);
+    background: var(--aw-bg);
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    padding: var(--aw-s2) var(--aw-s3);
+    outline: none;
+    transition: border-color var(--aw-t-hover) ease, box-shadow var(--aw-t-hover) ease;
+}
+
+.sk-input:focus {
+    border-color: var(--aw-primary);
+    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+}
+
+.sk-input::placeholder { color: var(--aw-text-4); }
+
+.sk-textarea { resize: vertical; min-height: 88px; line-height: 1.6; }
+
+/* ── 导入区 ─────────────────────────────────────────────── */
+
+.sk-drop {
+    border: 1px dashed var(--aw-border-strong);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg-subtle);
+    padding: var(--aw-s6) var(--aw-s4);
+    text-align: center;
+    color: var(--aw-text-3);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color var(--aw-t-hover) ease, background var(--aw-t-hover) ease;
+}
+
+.sk-drop:hover { border-color: var(--aw-primary); background: var(--aw-primary-soft); }
+.sk-drop.is-over { border-color: var(--aw-primary); background: var(--aw-primary-soft); }
+
+.sk-import-row {
+    display: flex;
+    align-items: center;
+    gap: var(--aw-s2);
+    flex-wrap: wrap;
+}
+
+.sk-import-row .aw-chip { flex: 1 1 auto; min-width: 0; }
+
+.sk-result {
+    border-radius: var(--aw-r-md);
+    border: 1px solid var(--aw-border);
+    background: var(--aw-bg-subtle);
+    padding: var(--aw-s3);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--aw-s1);
+}
+
+.sk-result.is-ok { border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08); }
+.sk-result.is-err { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); }
+
+.sk-result-title { font-weight: 500; color: var(--aw-text); }
+.sk-result-line { color: var(--aw-text-3); font-size: 12px; overflow-wrap: anywhere; }
+.sk-result-line.is-err { color: var(--aw-danger); }
+
+/* ── 空态 ───────────────────────────────────────────────── */
+
+.sk-empty {
+    padding: var(--aw-s6) var(--aw-s4);
+    text-align: center;
+    font-size: 13px;
+    color: var(--aw-text-4);
+    border: 1px dashed var(--aw-border);
+    border-radius: var(--aw-r-md);
+}
+
+/* ── 响应式 ─────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+    .sk-page { padding: var(--aw-s6) var(--aw-s4); }
+    .sk-title { font-size: 20px; }
+}
+
+@media (max-width: 560px) {
+    .sk-row { flex-direction: column; align-items: stretch; }
+    .sk-ctrl { justify-content: flex-end; }
+    .sk-head { flex-direction: column; }
+}

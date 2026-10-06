@@ -1,0 +1,120 @@
+%% 图一：Agent 多步任务执行（含工具调用与审批）
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant FE as 前端 aegis_main.html
+    participant API as Flask /api/agent
+    participant RUN as AgentRunner
+    participant LLM as LLMClient(智谱)
+    participant AP as ApprovalManager
+    participant TL as ToolRegistry/终端
+    participant DB as AgentTrace(SQLite)
+
+    U->>FE: 输入任务"给 main.py 加日志并重跑测试"
+    FE->>API: POST /api/agent/run (session_id, message, workspace)
+    API->>RUN: AgentRunner(session_id, workspace, max_steps=25)
+    API-->>FE: SSE run_start{task_id, mode:"agent"}
+    RUN->>DB: save_user(task)
+    RUN->>LLM: stream_tools(messages, TOOL_SCHEMAS)
+
+    loop 最多 25 步
+        RUN-->>FE: SSE agent_step{step, status:"thinking"}
+        LLM-->>RUN: delta 文本 / tool_calls
+        RUN-->>FE: SSE chunk{content}
+        alt 无 tool_calls（任务完成）
+            RUN->>DB: save_assistant(final)
+            RUN-->>FE: SSE run_end{stopped_by:"completed"}
+        else 有 tool_calls
+            RUN-->>FE: SSE tool_call{call_id, tool, args, risk}
+            alt 风险 = READONLY（只读白名单）
+                RUN->>TL: dispatch(name, args)
+            else 风险 = WRITE / DANGEROUS
+                RUN->>AP: request(task_id, kind, title, diff, dangerous)
+                AP-->>RUN: ApprovalRequest(event)
+                RUN-->>FE: SSE approval_request{request_id, diff, options}
+                FE-->>U: 展示审批卡片 [允许一次][本任务允许][拒绝]
+                U->>FE: 点击"允许一次"
+                FE->>API: POST /api/agent/approve {request_id, decision:"allow_once"}
+                API->>AP: resolve(request_id, decision)
+                AP->>RUN: event.set()
+                RUN->>RUN: decision = wait() 返回 allow_once
+                alt decision = deny
+                    RUN-->>FE: SSE approval_resolved{decision:"deny"}
+                    RUN->>LLM: 回填"用户拒绝了本次操作"
+                else decision = allow_*
+                    RUN->>TL: dispatch(name, args)（沙箱校验→备份→原子写/执行）
+                end
+            end
+            TL-->>RUN: ToolResult{ok, data, diff, elapsed_ms}
+            RUN-->>FE: SSE tool_result{...}
+            opt 产生了文件变更
+                TL-->>FE: SSE diff{path, diff, stats}
+                TL-->>FE: SSE file_change{change_id, action, backup_path}
+            end
+            opt 产生了终端输出
+                TL-->>FE: SSE terminal{stream:"stdout", text}
+            end
+            RUN->>DB: save_tool_call / save_tool_result
+            RUN->>LLM: 回填 tool messages，进入下一步
+        end
+    end
+
+    Note over RUN,FE: 达到 25 步 → 不带 tools 强制总结一次
+    RUN-->>FE: SSE chunk{总结 + 未完成说明}
+    RUN-->>FE: SSE run_end{stats}
+    RUN-->>FE: SSE done{session_id}
+
+
+%% 图二：首次启动 —— 配置密钥并测试连接
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant APP as desktop/app.py
+    participant SRV as LocalServer(werkzeug)
+    participant FE as 前端
+    participant API as /api/settings
+    participant SVC as SettingsService
+    participant KS as KeyStore(keyring/DPAPI)
+    participant P as 服务商(智谱)
+
+    U->>APP: 双击 Aegis 图标
+    APP->>SRV: pick_port() 5000..5049 + make_token()
+    SRV->>SRV: make_server("127.0.0.1", port, app, threaded=True)
+    SRV-->>APP: (port, token)
+    APP->>APP: 写 %APPDATA%\Aegis\run\runtime.json
+    APP->>FE: webview.create_window("Aegis", http://127.0.0.1:port/aegis)
+    FE->>APP: GET /token.js
+    APP-->>FE: window.AEGIS_TOKEN = "<随机>"
+    FE->>API: GET /api/settings/bootstrap (带 X-Aegis-Token)
+    API->>SVC: bootstrap()
+    SVC->>KS: list_keys()
+    KS-->>SVC: {}（无任何密钥）
+    SVC-->>FE: {need_setup:true, recommended:"zhipu", presets:[...]}
+    FE-->>U: 弹出 3 步向导（第 1 步 欢迎说明）
+    U->>FE: 下一步
+    FE-->>U: 第 2 步 选服务商（智谱 推荐 + free_note + key_url）
+    U->>FE: 选择"智谱 GLM"
+    FE-->>U: 第 3 步 填 Key + 选工作区
+    U->>FE: 粘贴 API Key；浏览选择工作区
+    FE->>API: POST /api/settings/test {key:"zhipu", api_key:"...", save:false}
+    API->>SVC: test_connection()
+    SVC->>P: POST /chat/completions (hi, max_tokens=16)
+    alt 成功
+        P-->>SVC: 200 + 内容
+        SVC-->>FE: {ok:true, latency_ms:320}
+        FE-->>U: 连接成功（延迟 320ms）
+        U->>FE: 点击"完成，开始使用"
+        FE->>API: PUT /api/settings/providers {key, base_url, model, api_key, workspace}
+        API->>SVC: save_providers()
+        SVC->>KS: save_key("zhipu", secret)
+        KS-->>SVC: True（Windows 凭据管理器 / DPAPI）
+        SVC->>SVC: 写 config.user.json（仅 key_ref + has_key，无密钥）
+        SVC->>SVC: apps.reload_config() → apps.llm.reset_client()
+        SVC-->>FE: {ok:true, providers:[...掩码...], active_label:"智谱 GLM · glm-4-flash"}
+        FE-->>U: 向导关闭，输入框启用，顶部角标更新
+    else 失败（401）
+        P-->>SVC: 401
+        SVC->>SVC: errors.classify(401) → INVALID_KEY
+        SVC-->>FE: {ok:false, error:{code:"INVALID_KEY", reason:"API Key 无效或已失效", action:"...", need_settings:true}}
+        FE-->>U: 无效 Key + 申请链接 + [前往设置]
+    end

@@ -1,0 +1,73 @@
+[project]
+name = "aegis-demo"
+version = "1.8.0"
+description = "桌面端编码智能体：装上就能用，用自己的 API Key 接任意 OpenAI 兼容大模型"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Qiu1717" }]
+keywords = [
+    "ai-agent",
+    "coding-assistant",
+    "llm",
+    "openai-compatible",
+    "flask",
+    "pywebview",
+    "desktop",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: X11 Applications",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Utilities",
+]
+
+# 运行时依赖刻意保持精简：不引入 LangChain / torch / numpy 等重型传递依赖。
+dependencies = [
+    "Flask==3.0.3",
+    "Flask-Cors==4.0.1",
+    "pymysql==1.1.1",
+    "requests==2.32.3",
+    "pywebview>=5.0,<6.0",
+    "keyring>=24.0,<26.0",
+]
+
+[project.optional-dependencies]
+# 打包成 Windows 安装包所需（不随安装包分发）
+build = ["pyinstaller>=6.0"]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/Qiu1717/Aegis-demo"
+Repository = "https://github.com/Qiu1717/Aegis-demo"
+Changelog = "https://github.com/Qiu1717/Aegis-demo/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Qiu1717/Aegis-demo/issues"
+
+[project.scripts]
+aegis-web = "main:create_app"
+aegis-desktop = "desktop.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# 不设 addopts = "-q"：会让 -q 模式下的汇总行被抑制，
+# 反而看不到「N passed」这类关键结论。保持默认输出即可。
+markers = [
+    "sandbox: 工作区沙箱与路径逃逸相关用例",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# 与现有代码风格一致：允许中文注释与较宽的行宽
+select = ["E", "F", "W"]
+ignore = ["E501"]

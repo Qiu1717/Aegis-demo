@@ -1,0 +1,19 @@
+# ==========================================================================
+#  Aegis —— 构建机专用依赖（仅用于「打包」这台机器，不随安装包分发）
+#
+#  说明：
+#    · pywebview / keyring 是运行时依赖，会被打进 dist\Aegis；
+#    · pyinstaller 只在构建时需要，不会出现在最终产物里；
+#    · 运行时基础依赖见仓库根目录的 requirements.txt（Flask / pymysql / requests 等）。
+#
+#  安装方式（desktop\build.bat 会自动执行）：
+#      pip install -r requirements.txt -r desktop\requirements-desktop.txt
+#
+#  版本约束理由：
+#    · pywebview 5.x：6.x 尚未验证，5.x 与 Windows WebView2 组合最稳定；
+#    · keyring 24/25：后端 API 稳定，且兼容 Windows DPAPI 回退方案；
+#    · pyinstaller 6.x：支持 Python 3.10 与 onedir 布局，spec 语法以本版本为准。
+# ==========================================================================
+pywebview>=5.0,<6.0
+keyring>=24.0,<26.0
+pyinstaller>=6.0

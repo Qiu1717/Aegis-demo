@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技能中心 · Aegis</title>
+    <!-- 与工作台共用同一套设计 token，保证来回切换视觉一致 -->
+    <link rel="stylesheet" href="/static/css/workspace.css?v={{ static_ver }}">
+    <link rel="stylesheet" href="/static/css/skills.css?v={{ static_ver }}">
+</head>
+<body>
+    <!-- 独立页面：自带实色背景与独立布局容器，不使用浮层弹窗。
+         返回入口统一指向工作台首页 /workspace（由 / 重定向），
+         不再写死旧的 /aegis，避免来回切换时退回旧版界面。 -->
+    <div class="sk-page">
+        <div class="sk-wrap">
+
+            <header class="sk-head">
+                <div class="sk-head-text">
+                    <div class="sk-title">技能中心</div>
+                    <div class="sk-sub">
+                        已启用的技能会注入本次任务的提示词；模型采用该技能时会在回复中标注「[技能:名称]」，
+                        工作台的时间线会显示调用状态。技能数据保存在本机用户配置中，重启后依然有效。
+                    </div>
+                </div>
+                <a class="aw-btn" href="/workspace">返回工作台</a>
+            </header>
+
+            <!-- ── 已注册技能 ──────────────────────────────── -->
+            <section class="sk-section">
+                <div class="sk-section-title">已注册技能</div>
+                <div class="sk-list" id="skList"></div>
+                <div class="sk-empty" id="skEmpty" hidden>还没有任何技能</div>
+            </section>
+
+            <!-- ── 从文件导入 ──────────────────────────────── -->
+            <section class="sk-section">
+                <div class="sk-section-title">从文件导入</div>
+                <p class="sk-hint">
+                    支持本地 <b>.json</b> 文件，可拖拽到下方区域。识别三种形态：单个技能对象、
+                    技能数组，或技能包 <b>{"skills": [...]}</b>。导入前会逐条校验，失败项会给出原因且不中断其余条目。
+                </p>
+
+                <div class="sk-drop" id="skDrop">
+                    把技能文件拖到这里，或点击选择文件
+                    <input type="file" id="skFile" accept=".json,application/json" hidden>
+                </div>
+
+                <div class="sk-import-row">
+                    <span class="aw-chip" id="skFileName">未选择文件</span>
+                    <button class="aw-btn aw-btn-primary" id="btnImport" type="button" disabled>导入</button>
+                    <button class="aw-btn" id="btnClearFile" type="button" disabled>清除</button>
+                </div>
+
+                <div class="sk-result" id="skImportResult" hidden></div>
+            </section>
+
+            <!-- ── 注册新技能 ──────────────────────────────── -->
+            <section class="sk-section">
+                <div class="sk-section-title">注册新技能</div>
+                <input class="sk-input" id="skName" type="text" maxlength="40"
+                       placeholder="技能名称（≤40 字）" autocomplete="off" spellcheck="false">
+                <input class="sk-input" id="skDesc" type="text" maxlength="200"
+                       placeholder="一句话描述（≤200 字）" autocomplete="off" spellcheck="false">
+                <textarea class="sk-input sk-textarea" id="skInstr" rows="4" maxlength="4000"
+                          placeholder="技能指令：当需求匹配时，Aegis 应如何执行（≤4000 字）" spellcheck="false"></textarea>
+                <div>
+                    <button class="aw-btn aw-btn-primary" id="btnRegSkill" type="button">注册技能</button>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <div class="aw-toast" id="awToast" role="status" aria-live="polite"></div>
+
+    <script src="/token.js"></script>
+    <script src="/static/js/auth.js?v={{ static_ver }}"></script>
+    <script src="/static/js/common.js?v={{ static_ver }}"></script>
+    <script src="/static/js/skills.js?v={{ static_ver }}"></script>
+</body>
+</html>

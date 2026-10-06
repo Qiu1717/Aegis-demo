@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Aegis · 智能体工作台</title>
+    <link rel="stylesheet" href="/static/css/common.css?v={{ static_ver }}">
+    <link rel="stylesheet" href="/static/css/settings.css?v={{ static_ver }}">
+    <link rel="stylesheet" href="/static/css/agent.css?v={{ static_ver }}">
+</head>
+<body>
+    <div class="aegis-app" id="aegisApp">
+
+        <!-- ── 左栏：工作区 / 任务 / 执行选项 ─────────────── -->
+        <aside class="ag-side" aria-label="工作区与任务">
+            <div class="ag-side-head">
+                <div class="ag-brand">
+                    <span class="ag-logo">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3h-1v1a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-1H4a3 3 0 0 1-3-3v-3a3 3 0 0 1 3-3h1V9a3 3 0 0 1 3-3h1V5a3 3 0 0 1 3-3z"/>
+                        </svg>
+                    </span>
+                    <span class="ag-brand-name">Aegis</span>
+                </div>
+            </div>
+
+            <div class="ag-block">
+                <div class="ag-block-title">工作区</div>
+                <div class="ag-ws-row">
+                    <span class="ag-ws-path" id="wsPath" title="">未设置</span>
+                    <button class="ag-icon-btn" id="btnCopyWs" type="button" title="复制路径" aria-label="复制工作区路径">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>
+                    <button class="ag-icon-btn" id="btnPickWorkspace" type="button" title="切换目录" aria-label="切换工作区目录">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    </button>
+                    <button class="ag-icon-btn" id="btnOpenSettings" type="button" title="设置" aria-label="打开设置">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </button>
+                </div>
+                <div class="ag-ws-reason" id="wsReason">请选择一个本地目录，Agent 只能读写该目录内的文件。</div>
+                <div class="ag-ws-search">
+                    <input class="ag-ws-search-input" id="wsSearchInput" type="text"
+                           placeholder="搜索文件名或内容…" autocomplete="off" spellcheck="false">
+                    <button class="ag-btn ag-btn-ghost ag-btn-sm" id="btnWsSearch" type="button">搜索</button>
+                </div>
+                <div class="ag-ws-results" id="wsResults" hidden></div>
+            </div>
+
+            <div class="ag-block">
+                <div class="ag-block-title">对话</div>
+                <button class="ag-btn ag-btn-primary ag-btn-block" id="btnNewTask" type="button">＋ 新建对话</button>
+                <div class="ag-conv-list" id="convList"></div>
+            </div>
+
+            <div class="ag-block ag-block-grow">
+                <div class="ag-block-title">任务</div>
+                <div class="ag-task-list" id="taskList"></div>
+            </div>
+
+            <!-- ── 权限设置（可展开，三级）────────────────────── -->
+            <div class="ag-perm" id="permBlock">
+                <button class="ag-perm__head" id="btnPermToggle" type="button"
+                        aria-expanded="false" aria-controls="permBody">
+                    <span class="ag-block-title">权限设置</span>
+                    <span class="ag-perm__current" id="permCurrent">需用户批准</span>
+                    <svg class="ag-perm__caret" width="12" height="12" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </button>
+                <div class="ag-perm__body" id="permBody">
+                    <label class="ag-perm__opt">
+                        <input type="radio" name="permMode" value="full">
+                        <span class="ag-perm__opt-main">
+                            <span class="ag-perm__opt-title">完全访问</span>
+                            <span class="ag-perm__opt-desc">允许直接读写工作区文件，不再逐次询问</span>
+                        </span>
+                    </label>
+                    <label class="ag-perm__opt">
+                        <input type="radio" name="permMode" value="approve">
+                        <span class="ag-perm__opt-main">
+                            <span class="ag-perm__opt-title">需用户批准</span>
+                            <span class="ag-perm__opt-desc">写文件、执行命令前先给你看内容并等待确认</span>
+                        </span>
+                    </label>
+                    <label class="ag-perm__opt">
+                        <input type="radio" name="permMode" value="chat">
+                        <span class="ag-perm__opt-main">
+                            <span class="ag-perm__opt-title">仅保留对话</span>
+                            <span class="ag-perm__opt-desc">只聊天与讨论，不触碰任何文件或命令</span>
+                        </span>
+                    </label>
+                    <p class="ag-hint">危险命令（删除、格式化、强制推送）在任何模式下都需要你确认。</p>
+                </div>
+            </div>
+
+            <div class="ag-side-foot">
+                <span class="ag-powered">Powered by {{ powered_by }}</span>
+            </div>
+        </aside>
+
+        <!-- ── 中栏：任务时间线 ───────────────────────────── -->
+        <main class="ag-main">
+            <header class="ag-topbar">
+                <div class="ag-topbar-left">
+                    <button class="ag-side-toggle" id="btnSideToggle" type="button" aria-label="折叠/展开侧边栏" title="折叠侧边栏">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                    </button>
+                    <span class="ag-topbar-title" id="runTitle">Aegis 工作台</span>
+                    <span class="ag-status" id="runStatus" data-state="idle">空闲</span>
+                </div>
+                <div class="ag-topbar-right">
+                    <div class="ag-think" id="thinkSeg" role="group" aria-label="思考量级">
+                        <button type="button" class="ag-think-btn" data-level="light" title="轻量级：速度优先，节省 token">轻量级</button>
+                        <button type="button" class="ag-think-btn" data-level="balanced" title="均衡：兼顾效果与成本">均衡</button>
+                        <button type="button" class="ag-think-btn" data-level="max" title="极致性能：最强推理，允许更高耗时与 token">极致性能</button>
+                    </div>
+                    <span class="ag-model-chip" id="modelChip" title="当前模型（在「设置」中配置）">模型：加载中…</span>
+                    <button class="ag-btn ag-btn-ghost ag-btn-sm" id="btnSkills" type="button">技能</button>
+                    <button class="ag-btn ag-btn-warn ag-btn-sm" id="btnPause" type="button" disabled>暂停</button>
+                    <button class="ag-btn ag-btn-danger ag-btn-sm" id="btnStop" type="button" disabled>停止</button>
+                    <button class="ag-btn ag-btn-ghost ag-btn-sm" id="btnSettings" type="button">设置</button>
+                </div>
+            </header>
+
+            <div class="ag-timeline" id="timeline">
+                <div class="ag-empty" id="timelineEmpty">
+                    <h2>你好，我是 Aegis</h2>
+                    <p>既能陪你聊天答疑，也能<b>在工作区里读代码、改文件、跑命令</b>；所有写文件与执行命令都会先给你看差异并等待确认。</p>
+                    <ul class="ag-empty-list">
+                        <li>把 login.py 里的登录校验抽成独立函数</li>
+                        <li>找出项目里所有 TODO 并汇总成清单</li>
+                        <li>用通俗的话解释一下什么是依赖注入</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="ag-composer">
+                <textarea id="taskInput" rows="2" placeholder="给 Aegis 发送消息，或描述编码任务…（Enter 发送，Shift + Enter 换行）"></textarea>
+                <div class="ag-composer-bar">
+                    <span class="ag-composer-hint" id="composerHint">Agent 只在工作区内操作</span>
+                    <button class="ag-btn ag-btn-primary" id="btnSend" type="button">发送</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- ── 右栏：产物面板（可折叠）──────────────────── -->
+        <aside class="ag-right" id="agRight" aria-label="产物面板">
+            <div class="ag-right-head">
+                <span class="ag-block-title">产物</span>
+                <button class="ag-btn ag-btn-ghost ag-btn-sm" id="btnUndoAll" type="button" disabled>全部撤销</button>
+            </div>
+            <div class="ag-art-section" id="artCommands">
+                <div class="ag-art-subtitle">命令记录</div>
+                <div class="ag-cmd-list" id="cmdList"></div>
+                <div class="ag-art-empty" id="cmdEmpty" hidden>本次任务没有执行命令</div>
+            </div>
+            <div class="ag-art-section ag-art-grow">
+                <div class="ag-art-subtitle">文件变更</div>
+                <div class="ag-change-list" id="changeList"></div>
+                <div class="ag-art-empty" id="changeEmpty">本次任务还没有产物</div>
+            </div>
+            <div class="ag-stats" id="runStats"></div>
+        </aside>
+
+        <!-- 右栏折叠 / 展开悬浮柄 -->
+        <button class="ag-right-toggle" id="btnToggleRight" type="button"
+                aria-label="折叠或展开变更面板" title="折叠 / 展开变更面板">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18l6-6-6-6"/>
+            </svg>
+        </button>
+
+        <!-- 移动端侧边栏遮罩（点击收起抽屉） -->
+        <div class="ag-side-overlay" id="sideOverlay" hidden></div>
+    </div>
+
+    <!-- 技能中心已改为独立页面 /skills（templates/agent/skills.html）。
+         原浮层弹窗 #skillsModal 位于 .aegis-app 之外，取不到 --ag-* 变量导致
+         背景透明、遮挡主页面、文字重叠，已整体移除；入口按钮改为跳转 /skills。 -->
+
+    <!-- 文件 / 差异预览弹窗（搜索跳转与产物定位共用） -->
+    <div class="ag-fmodal" id="fileModal" hidden>
+        <div class="ag-fmodal__mask" id="fileModalMask"></div>
+        <div class="ag-fmodal__card">
+            <header class="ag-fmodal__head">
+                <span class="ag-fmodal__path" id="fileModalPath">文件</span>
+                <span class="ag-fmodal__meta" id="fileModalMeta"></span>
+                <button class="ag-icon-btn" id="fileModalCopy" type="button" title="复制路径" aria-label="复制路径">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+                <button class="ag-icon-btn" id="fileModalClose" type="button" title="关闭" aria-label="关闭预览">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </header>
+            <div class="ag-fmodal__body" id="fileModalBody"></div>
+        </div>
+    </div>
+
+    {% include "agent/_settings_modal.html" %}
+
+    <script src="/token.js"></script>
+    <script src="/static/js/auth.js?v={{ static_ver }}"></script>
+    <script src="/static/js/common.js?v={{ static_ver }}"></script>
+    <script src="/static/js/settings.js?v={{ static_ver }}"></script>
+    <script src="/static/js/agent.js?v={{ static_ver }}"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+# ── 环境变量与密钥（严禁提交）──────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── 本地数据（运行时自动生成）──────────────────────────────
+*.db
+*.sqlite3
+*.sqlite
+*.log
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+# 构建用虚拟环境（build.bat 现场创建；目录名带连字符，需单独列出，
+# 否则 .venv/ 的尾斜杠规则匹配不到，会把上千个第三方包提交进仓库）
+.venv-build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# ── 构建产物（PyInstaller / Inno Setup 输出）─────────────────
+build/
+dist/
+# 桌面打包专用的产物目录
+/desktop/Output/
+*.spec.bak
+*.iss.bak
+
+# ── 运行时与测试残留 ────────────────────────────────────────
+logs/
+_qa_tmp/
+tests/.tmpbase/
+tests/.tmpdata/
+*.bak
+*.bak-*
+
+# ── 编辑器 / IDE ───────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── 操作系统 ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── 打包出来的二进制与压缩包（不入库）────────────────────────
+*.exe
+*.zip

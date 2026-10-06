@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Aegis</title>
+    <link rel="stylesheet" href="/static/css/common.css?v={{ static_ver }}">
+    <link rel="stylesheet" href="/static/css/main.css?v={{ static_ver }}">
+</head>
+<body>
+    <div class="app" id="app">
+
+        <!-- ── 左侧可折叠侧边栏 ────────────────────────── -->
+        <aside class="sidebar" id="sidebar" aria-label="会话侧边栏">
+            <div class="sidebar-head">
+                <div class="brand">
+                    <span class="brand-logo">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v1h1a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3h-1v1a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-1H4a3 3 0 0 1-3-3v-3a3 3 0 0 1 3-3h1V9a3 3 0 0 1 3-3h1V5a3 3 0 0 1 3-3z"/>
+                        </svg>
+                    </span>
+                    <span class="brand-name">Aegis</span>
+                </div>
+                <button class="icon-btn sidebar-close" id="sidebarClose" aria-label="收起侧边栏">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M3 12h18M3 18h18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <button class="new-chat" id="newChatBtn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                新建对话
+            </button>
+
+            <div class="side-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="sessionSearch" placeholder="搜索会话" autocomplete="off">
+            </div>
+
+            <nav class="session-list" id="sessionList" aria-label="历史会话"></nav>
+
+            <div class="side-nav">
+                <a class="side-nav-item" href="/aicontrol">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    AI 规则控制
+                </a>
+                <a class="side-nav-item" id="memoryBtn" href="javascript:void(0)" title="查看与编辑跨会话长期记忆">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 1 5 3 3 0 0 0 4 4 3 3 0 0 0 5 1V4a3 3 0 0 0-5-1z"/>
+                        <path d="M15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-1 5 3 3 0 0 1-4 4 3 3 0 0 1-5 1"/>
+                    </svg>
+                    我的记忆
+                </a>
+            </div>
+
+            <div class="side-foot">
+                <button class="theme-toggle" id="themeToggle" aria-label="切换深浅色主题">
+                    <span class="theme-icon theme-icon-sun">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="4"/>
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                        </svg>
+                    </span>
+                    <span class="theme-icon theme-icon-moon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                    </span>
+                    <span class="theme-label">切换主题</span>
+                </button>
+                <span class="side-powered">Powered by {{ powered_by }}</span>
+            </div>
+        </aside>
+        <div class="backdrop" id="backdrop"></div>
+
+        <!-- ── 主对话区 ────────────────────────────────── -->
+        <main class="main">
+            <header class="topbar">
+                <button class="icon-btn" id="sidebarToggle" aria-label="展开侧边栏">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <path d="M9 3v18"/>
+                    </svg>
+                </button>
+                <span class="topbar-title" id="topbarTitle">新对话</span>
+                <button class="icon-btn" id="clearChatBtn" title="清空当前会话" aria-label="清空当前会话" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14"/>
+                    </svg>
+                </button>
+                <span class="model-tag" id="modelTag">{{ powered_by }}</span>
+            </header>
+
+            <div class="chat-scroll" id="chatScroll">
+                <!-- 空态欢迎区（发送第一条消息后隐藏） -->
+                <div class="hero" id="hero">
+                    <h1 class="hero-title">Aegis 欢迎你！</h1>
+                    <p class="hero-sub">有什么可以帮你？试试下面的示例，或直接在下方输入</p>
+                    <div class="example-grid" id="exampleGrid"></div>
+                </div>
+                <!-- 消息列表 -->
+                <div class="messages" id="messages"></div>
+            </div>
+
+            <div class="composer-zone">
+                <div class="composer-tools">
+                    <button class="web-toggle active" id="webToggle" type="button" role="switch" aria-checked="true" title="联网搜索开关：开启时 Aegis 会先检索互联网并过滤出相关结果再回答；关闭时完全不发起任何网络请求，仅基于本地知识作答">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        联网搜索
+                    </button>
+                </div>
+                <div class="chips" id="chips"></div>
+                <div class="composer">
+                    <textarea id="chatInput" rows="1" placeholder="给 Aegis 发送消息…" enterkeyhint="send"></textarea>
+                    <button class="send-btn" id="sendBtn" aria-label="发送" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5M5 12l7-7 7 7"/>
+                        </svg>
+                    </button>
+                </div>
+                <p class="foot-note">内容由 AI 生成，请仔细甄别 · 对话记录保存在当前浏览器会话对应的服务端数据库中</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="/token.js"></script>
+    <script src="/static/js/auth.js?v={{ static_ver }}"></script>
+    <script src="/static/js/common.js?v={{ static_ver }}"></script>
+    <script src="/static/js/main.js?v={{ static_ver }}"></script>
+</body>
+</html>

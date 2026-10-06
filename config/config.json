@@ -1,0 +1,109 @@
+{
+    "app": {
+        "host": "127.0.0.1",
+        "port": 5000,
+        "debug": false
+    },
+    "database": {
+        "host": "localhost",
+        "port": 3306,
+        "user": "root",
+        "password": "root",
+        "database": "aiagent",
+        "charset": "utf8mb4"
+    },
+    "llm": {
+        "provider_chain": [
+            "zhipu",
+            "modelscope",
+            "siliconflow",
+            "dashscope",
+            "ollama",
+            "offline"
+        ],
+        "timeout": 60,
+        "max_context_messages": 20,
+        "max_context_tokens": 6000,
+        "max_memory_tokens": 600,
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "system_prompt": "你是 Aegis，运行在用户本机上的 AI 智能体。你可以回答各类问题、撰写文案、辅助编程与逻辑推理。若被问及身份，请如实说明你是 Aegis；不要冒充任何第三方产品，也不要虚构型号。",
+        "providers": {
+            "zhipu": {
+                "enabled": true,
+                "model": "glm-4-flash"
+            },
+            "modelscope": {
+                "enabled": true,
+                "model": "Qwen/Qwen3.5-27B"
+            },
+            "siliconflow": {
+                "enabled": true,
+                "model": "THUDM/GLM-4-9B-0414"
+            },
+            "dashscope": {
+                "enabled": false,
+                "model": "qwen-plus"
+            },
+            "ollama": {
+                "enabled": false,
+                "model": "qwen2.5:7b"
+            },
+            "offline": {
+                "enabled": true
+            }
+        }
+    },
+    "agent": {
+        "max_steps": 25,
+        "auto_approve_write": false,
+        "command_timeout": 120,
+        "output_limit": 20000,
+        "read_max_lines": 2000,
+        "search_max_results": 50,
+        "approval_wait_timeout": 300
+    },
+    "security": {
+        "require_token": true,
+        "token_header": "X-Aegis-Token",
+        "redact_logs": true,
+        "keystore_backend": "auto",
+        "allow_env_key_override": true
+    },
+    "desktop": {
+        "app_name": "Aegis",
+        "window_title": "Aegis",
+        "window_width": 1280,
+        "window_height": 820,
+        "window_min_width": 1024,
+        "window_min_height": 680,
+        "port_start": 5000,
+        "port_end": 5049,
+        "single_instance": true,
+        "env_debug": false
+    },
+    "compliance": {
+        "block_message": "你的问题存在不合规内容，我无法给予回复，抱歉！"
+    },
+    "memory": {
+        "enabled": true,
+        "auto_extract": false,
+        "max_items": 200,
+        "ttl_days": 180,
+        "low_importance_threshold": 1
+    },
+    "search": {
+        "enabled": true,
+        "provider": "auto",
+        "max_results": 10,
+        "timeout": 10,
+        "tavily_api_key_env": "TAVILY_API_KEY",
+        "brave_api_key_env": "BRAVE_API_KEY",
+        "web_grounding": {
+            "enabled": true,
+            "max_results": 5,
+            "timeout": 8,
+            "excerpt_top": 2
+        }
+    }
+}

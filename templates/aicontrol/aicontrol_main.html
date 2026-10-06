@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI规则控制 - Aegis</title>
+    <link rel="stylesheet" href="/static/css/common.css?v={{ static_ver }}">
+    <link rel="stylesheet" href="/static/css/aicontrol.css?v={{ static_ver }}">
+</head>
+<body>
+    <div class="aicontrol-wrap">
+        <!-- 顶部导航栏 -->
+        <header class="aicontrol-header">
+            <h1>
+                <span class="header-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </span>
+                AI规则控制
+            </h1>
+            <a href="/" class="back-home">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回首页
+            </a>
+        </header>
+
+        <!-- 操作工具栏 -->
+        <div class="aicontrol-toolbar">
+            <button class="btn btn-primary" id="btnNew">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                新建规则
+            </button>
+            <button class="btn btn-secondary" id="btnEdit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                编辑
+            </button>
+            <button class="btn btn-danger" id="btnDelete">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                删除
+            </button>
+            <button class="btn btn-success" id="btnSave">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+                保存
+            </button>
+            <button class="btn btn-secondary" id="btnCancel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+                取消
+            </button>
+            <span class="toolbar-info">点击行选中后再编辑/删除</span>
+        </div>
+
+        <!-- 规则表格区 -->
+        <div class="aicontrol-body">
+            <div class="aicontrol-table-wrap">
+                <table class="aicontrol-table">
+                    <thead>
+                        <tr>
+                            <th class="col-seq">序号</th>
+                            <th>规则内容</th>
+                            <th class="col-status">状态</th>
+                            <th class="col-sort">排序</th>
+                            <th class="col-time">更新时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ruleTableBody">
+                        <tr>
+                            <td colspan="5" style="text-align:center;padding:40px;">
+                                <span class="spinner"></span> 加载中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/common.js?v={{ static_ver }}"></script>
+    <script src="/static/js/aicontrol.js?v={{ static_ver }}"></script>
+</body>
+</html>

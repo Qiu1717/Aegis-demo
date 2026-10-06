@@ -1,0 +1,255 @@
+{# Aegis — 模型服务商设置弹窗（Jinja partial）
+   用法：{% include "agent/_settings_modal.html" %}
+   依赖：static/css/settings.css、static/js/auth.js、static/js/settings.js
+   说明：本文件只提供 DOM 结构与静态文案，所有动态内容由 settings.js 渲染并转义。
+#}
+<div class="aegis-modal" id="settingsModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="aegis-modal__mask" data-act="close"></div>
+    <div class="aegis-modal__panel" role="document">
+        <header class="aegis-modal__head">
+            <h3 class="aegis-modal__title" id="settingsTitle">模型服务商设置</h3>
+            <button class="aegis-icon-btn" type="button" data-act="close" aria-label="关闭设置">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </header>
+
+        <div class="aegis-modal__body">
+            <!-- ── 服务商选择 ───────────────────────────── -->
+            <!-- 模型与密钥：核心配置，独立成卡片 -->
+            <section class="aegis-card aegis-card--flat">
+                <div class="aegis-card__head">
+                    <span class="aegis-card__title">模型与密钥</span>
+                    <span class="aegis-card__desc">选择服务商、填写 Base URL 与 API Key</span>
+                </div>
+                <div class="aegis-card__body">
+
+            <div class="aegis-field">
+                <label class="aegis-field__label" for="stProviderSel">服务商</label>
+                <select class="aegis-input" id="stProviderSel"></select>
+            </div>
+
+            <div class="aegis-field">
+                <label class="aegis-field__label" for="stBaseUrl">Base URL</label>
+                <input class="aegis-input" id="stBaseUrl" type="text" autocomplete="off"
+                       placeholder="https://…/v1" spellcheck="false">
+            </div>
+
+            <div class="aegis-field">
+                <label class="aegis-field__label" for="stModel">模型</label>
+                <div class="aegis-field__row">
+                    <input class="aegis-input" id="stModel" type="text" list="stModelList"
+                           autocomplete="off" placeholder="模型名，可手填" spellcheck="false">
+                    <datalist id="stModelList"></datalist>
+                </div>
+            </div>
+
+            <div class="aegis-field">
+                <label class="aegis-field__label" for="stContextLen">上下文窗口（Context Length）</label>
+                <div class="aegis-field__row">
+                    <input class="aegis-input aegis-input--num" id="stContextLen" type="number"
+                           min="0" step="1024" autocomplete="off"
+                           placeholder="0 = 按模型自动推断" spellcheck="false">
+                    <button class="btn btn-secondary aegis-btn-sm" id="stFetchModelsBtn2"
+                            type="button" title="从该服务商拉取可用模型清单">拉取模型</button>
+                </div>
+                <p class="aegis-field__hint" id="stContextHint">填 0 表示按模型名自动推断（常见模型已内置窗口表）；超过上限的历史会被自动裁剪。</p>
+            </div>
+
+            <div class="aegis-field">
+                <label class="aegis-field__label" for="stApiKey">API Key</label>
+                <div class="aegis-field__row">
+                    <input class="aegis-input" id="stApiKey" type="password" autocomplete="off"
+                           placeholder="留空表示不修改已保存的密钥" spellcheck="false">
+                    <button class="btn btn-secondary aegis-btn-sm" id="stToggleKey" type="button"
+                            title="需点击两次才会显示明文，10 秒后自动收回">显示</button>
+                    <a class="btn btn-secondary aegis-btn-sm" id="stKeyUrl" href="#" target="_blank"
+                       rel="noopener noreferrer" hidden>前往申请 ↗</a>
+                </div>
+                <p class="aegis-field__hint" id="stMaskHint">已保存：无</p>
+            </div>
+
+            <p class="aegis-note" id="stFreeNote"></p>
+                </div><!-- /aegis-card__body -->
+            </section>
+
+            <!-- ── 高级设置 ─────────────────────────────── -->
+            <details class="aegis-advanced aegis-card">
+                <summary>高级设置</summary>
+                <div class="aegis-advanced__grid">
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stTimeout">超时（秒）</label>
+                        <input class="aegis-input aegis-input--num" id="stTimeout" type="number" min="5" max="600" step="1" value="60">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stTemp">温度</label>
+                        <input class="aegis-input aegis-input--num" id="stTemp" type="number" min="0" max="2" step="0.1" value="0.7">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stMaxTokens">最大 Token</label>
+                        <input class="aegis-input aegis-input--num" id="stMaxTokens" type="number" min="256" max="32768" step="256" value="4096">
+                    </div>
+                </div>
+            </details>
+
+            <!-- ── 自定义厂商（OpenAI 兼容）──────────────── -->
+            <details class="aegis-advanced aegis-card" id="stCustBox">
+                <summary>自定义厂商（任意 OpenAI 兼容端点）</summary>
+                <div class="aegis-advanced__grid">
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stCustLabel">厂商名称</label>
+                        <input class="aegis-input" id="stCustLabel" type="text" autocomplete="off"
+                               placeholder="例如：我的中转站（显示在列表里）" spellcheck="false">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stCustKey">标识（可选）</label>
+                        <input class="aegis-input" id="stCustKey" type="text" autocomplete="off"
+                               placeholder="留空自动生成" spellcheck="false">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stCustUrl">API 地址</label>
+                        <input class="aegis-input" id="stCustUrl" type="text" autocomplete="off"
+                               placeholder="https://…/v1" spellcheck="false">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stCustModel">模型名称（Model）</label>
+                        <div class="aegis-field__row">
+                            <input class="aegis-input" id="stCustModel" type="text"
+                                   list="stCustModelList" autocomplete="off"
+                                   placeholder="可手填，或点右侧「拉取模型」" spellcheck="false">
+                            <datalist id="stCustModelList"></datalist>
+                            <button class="btn btn-secondary aegis-btn-sm" id="stFetchModelsBtn"
+                                    type="button" title="从该地址拉取可用模型清单（OpenAI 兼容端点）">拉取模型</button>
+                        </div>
+                        <p class="aegis-field__hint" id="stFetchModelsHint"
+                           style="display:none"></p>
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <label class="aegis-field__label" for="stCustApiKey">API Key</label>
+                        <input class="aegis-input" id="stCustApiKey" type="password" autocomplete="off"
+                               placeholder="该厂商的密钥" spellcheck="false">
+                    </div>
+                    <div class="aegis-field aegis-field--inline">
+                        <button class="btn btn-secondary aegis-btn-sm" id="stCustAddBtn" type="button">添加厂商</button>
+                        <button class="btn btn-secondary aegis-btn-sm" id="stCustDelBtn" type="button" hidden>删除该厂商</button>
+                    </div>
+                </div>
+                <p class="aegis-field__hint">添加后自动加入故障切换链末位（本地模式之前），可在上方服务商下拉框中继续编辑或测试。</p>
+            </details>
+
+            <!-- ── 回答限制规则（AI 回答限制）────────────── -->
+            <details class="aegis-advanced aegis-card" id="gdBox">
+                <summary>回答限制规则</summary>
+                <div class="gd-body">
+
+                    <!-- 总开关 / 概况 -->
+                    <div class="gd-row">
+                        <label class="gd-switch" for="gdEnabled">
+                            <input class="gd-switch__input" id="gdEnabled" type="checkbox" checked>
+                            <span class="gd-switch__track"><span class="gd-switch__thumb"></span></span>
+                            <span class="gd-switch__text">启用回答限制</span>
+                        </label>
+                        <span class="gd-status" id="gdSummary">尚未加载</span>
+                    </div>
+
+                    <!-- 拒绝话术 -->
+                    <div class="aegis-field">
+                        <label class="aegis-field__label" for="gdRefusal">拒绝话术</label>
+                        <div class="aegis-field__row">
+                            <input class="aegis-input" id="gdRefusal" type="text" autocomplete="off"
+                                   spellcheck="false" placeholder="该问题涉及受限内容，我无法回答">
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdRefusalReset" type="button">恢复默认</button>
+                        </div>
+                        <p class="aegis-field__hint">命中规则时，Aegis 会用这段话术代替原本的回答。输入框失去焦点后自动保存。</p>
+                    </div>
+
+                    <!-- 规则类别 -->
+                    <div class="aegis-field">
+                        <div class="gd-subhead">规则类别</div>
+                        <div class="gd-list" id="gdCatList"></div>
+                        <div class="aegis-field__row">
+                            <input class="aegis-input" id="gdCatLabel" type="text" autocomplete="off"
+                                   spellcheck="false" placeholder="自定义类别名称，例如：违禁品">
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdCatAddBtn" type="button">添加类别</button>
+                        </div>
+                        <p class="aegis-field__hint">内置类别只能启用或停用，不可删除；停用后其下的关键词一并失效。</p>
+                    </div>
+
+                    <!-- 关键词 -->
+                    <div class="aegis-field">
+                        <div class="gd-subhead">关键词</div>
+                        <div class="gd-kw-head">
+                            <span>关键词</span>
+                            <span>匹配方式</span>
+                            <span>优先级</span>
+                            <span>所属类别</span>
+                            <span>启停</span>
+                            <span></span>
+                        </div>
+                        <div class="gd-list" id="gdKwList"></div>
+                        <p class="aegis-field__hint">精确 = 整句话完全相等才拦截；模糊 = 文本里出现该词就拦截。数字越大优先级越高。</p>
+                        <textarea class="aegis-input gd-textarea" id="gdBatch" rows="4" spellcheck="false"
+                                  placeholder="一行一个关键词，可用简写：词语,类别,模式,优先级"></textarea>
+                        <div class="aegis-field__row">
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdBatchAddBtn" type="button">批量添加</button>
+                            <span class="aegis-field__hint" id="gdBatchHint">示例：制作冰毒,crime,模糊,100</span>
+                        </div>
+                    </div>
+
+                    <!-- 导入 / 导出 -->
+                    <div class="aegis-field">
+                        <div class="gd-subhead">导入 / 导出</div>
+                        <div class="aegis-field__row">
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdExportBtn" type="button">导出 JSON</button>
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdImportBtn" type="button">导入 JSON</button>
+                            <input class="gd-file" id="gdFile" type="file" accept="application/json,.json" hidden>
+                        </div>
+                        <p class="aegis-field__hint">导入会覆盖当前全部限制规则，执行前会二次确认。</p>
+                    </div>
+
+                    <!-- 调试自检 -->
+                    <div class="aegis-field">
+                        <div class="gd-subhead">调试自检</div>
+                        <div class="aegis-field__row">
+                            <input class="aegis-input" id="gdTestInput" type="text" autocomplete="off"
+                                   spellcheck="false" placeholder="输入一句话，验证它会不会被拦截">
+                            <button class="btn btn-secondary aegis-btn-sm" id="gdTestBtn" type="button">测试</button>
+                        </div>
+                        <div class="gd-result" id="gdTestResult" hidden></div>
+                    </div>
+
+                </div>
+            </details>
+
+            <!-- ── 故障切换链 ───────────────────────────── -->
+            <div class="aegis-section">
+                <div class="aegis-section__head">故障切换链</div>
+                <ul class="aegis-chain" id="stChain"></ul>
+                <p class="aegis-field__hint">依次尝试，前面的不可用时自动切换下一个。</p>
+            </div>
+
+            <!-- 工作区不在设置里配置：统一由对话框左上角的按钮管理 -->
+
+            <!-- ── 状态 ─────────────────────────────────── -->
+            <div class="aegis-status" id="stStatus">
+                <span class="aegis-dot aegis-dot--idle" id="stStatusDot"></span>
+                <span id="stStatusText">尚未测试</span>
+            </div>
+
+            <div class="aegis-error" id="stError" hidden>
+                <div class="aegis-error__reason" id="stErrorReason"></div>
+                <div class="aegis-error__action" id="stErrorAction"></div>
+            </div>
+
+            <p class="aegis-field__hint" id="stKeyStoreNote"></p>
+        </div>
+
+        <footer class="aegis-modal__foot">
+            <button class="btn btn-secondary" id="stTestBtn" type="button">测试连接</button>
+            <span class="aegis-modal__spacer"></span>
+            <button class="btn btn-secondary" id="stCancelBtn" type="button">取消</button>
+            <button class="btn btn-primary" id="stSaveBtn" type="button">保存</button>
+        </footer>
+    </div>
+</div>
