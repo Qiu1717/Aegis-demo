@@ -27,8 +27,12 @@
 
 #define MyAppName      "Aegis"
 #define MyAppPublisher "Aegis"
-#define MyAppVersion   "1.8.0"
+#define MyAppVersion   "1.8.1"
 #define MyAppExeName   "Aegis.exe"
+
+#ifndef MyAppSourceDir
+  #define MyAppSourceDir "..\dist\Aegis"
+#endif
 
 [Setup]
 ; ── 应用标识 ──────────────────────────────────────────────
@@ -77,7 +81,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 ; 打包产物整体拷进安装目录（含 _internal 子目录）
-Source: "..\dist\Aegis\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Aegis"; Filename: "{app}\{#MyAppExeName}"

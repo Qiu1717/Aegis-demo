@@ -99,8 +99,76 @@ class ToolResult:
             "summary": self.summary,
         }
 
+    @staticmethod
+    def _truncate_data(data: Any, budget: int) -> Any:
+        """
+        在 data 内部做结构化截断，保证截断后整体仍是合法 JSON。
+
+        旧实现对序列化后的整串 JSON 硬切（text[:limit]），切出来的是损坏的
+        JSON 尾巴 —— 模型拿到非法 JSON 需要自行脑补，降低工具结果利用率。
+        现在按 data 的形态收缩：
+            · dict    → 逐键保留，超预算时对最长的字符串值截断；
+            · str/list → 直接截断 / 逐项丢弃尾部；
+            · 其他    → repr 后按字符串截断。
+        """
+        marker = "…（已截断）"
+        if budget <= 0:
+            return marker
+
+        def tlen(v: Any) -> int:
+            try:
+                return len(json.dumps(v, ensure_ascii=False))
+            except (TypeError, ValueError):
+                return len(repr(v))
+
+        if isinstance(data, dict):
+            out = {}
+            used = 0
+            # 先原样装下装得下的键（保持字段顺序），装不下且是字符串的超长键做截断
+            keys = list(data.keys())
+            for k in keys:
+                v = data[k]
+                cost = tlen(v)
+                if used + cost <= budget:
+                    out[k] = v
+                    used += cost
+                    continue
+                remain = budget - used
+                if remain > 40 and isinstance(v, str):
+                    # 对超长字符串值就地截断（budget 与 tlen 同为字符单位）
+                    keep = max(0, remain - len(marker))
+                    out[k] = v[:keep] + marker
+                    used = budget
+                else:
+                    out[k] = marker
+                    used += len(marker)
+            return out
+        if isinstance(data, str):
+            keep = max(0, budget - len(marker))
+            return data[:keep] + marker if len(data) > budget else data
+        if isinstance(data, list):
+            out = []
+            used = 0
+            for item in data:
+                cost = tlen(item)
+                if used + cost > budget:
+                    out.append(marker)
+                    break
+                out.append(item)
+                used += cost
+            return out
+        text = repr(data)
+        keep = max(0, budget - len(marker))
+        return text[:keep] + marker if len(text) > budget else text
+
     def payload_text(self, limit: int = MAX_RESULT_CHARS) -> str:
-        """回填给模型的文本（JSON，超长截断）"""
+        """
+        回填给模型的文本（**始终为合法 JSON**）。
+
+        预算策略：ok/tool/error 等骨架字段始终完整保留；
+        data 的序列化预算 = limit - 骨架开销，超限时对 data 做结构化截断
+        （见 _truncate_data），截断标记写在值内部而非切坏 JSON 本身。
+        """
         payload = {
             "ok": self.ok,
             "tool": self.tool,
@@ -110,11 +178,34 @@ class ToolResult:
         try:
             text = json.dumps(payload, ensure_ascii=False)
         except (TypeError, ValueError):
-            text = json.dumps({"ok": False, "tool": self.tool,
-                               "error": {"code": "SERIALIZE_FAILED"}},
-                              ensure_ascii=False)
-        if len(text) > limit:
-            text = text[:limit] + "...（已截断 %d 字符）" % (len(text) - limit)
+            # data 不可序列化：降级为 repr 再走同一条截断路径
+            payload["data"] = repr(self.data)
+            try:
+                text = json.dumps(payload, ensure_ascii=False)
+            except (TypeError, ValueError):
+                text = json.dumps({"ok": False, "tool": self.tool,
+                                   "error": {"code": "SERIALIZE_FAILED"}},
+                                  ensure_ascii=False)
+        if len(text) <= limit:
+            return text
+
+        # 超预算 → 收缩 data 后重序列化（骨架字段不动）
+        skeleton = {"ok": self.ok, "tool": self.tool, "data": None, "error": self.error}
+        overhead = len(json.dumps(skeleton, ensure_ascii=False))
+        data_budget = max(64, limit - overhead)
+        payload["data"] = self._truncate_data(self.data, data_budget)
+        try:
+            text = json.dumps(payload, ensure_ascii=False)
+        except (TypeError, ValueError):
+            payload["data"] = repr(payload["data"])[:data_budget * 2]
+            text = json.dumps(payload, ensure_ascii=False)
+        # 极端情况（error 本身巨大等）仍可能超限：此时 data 已极小，再做一次
+        # 安全兜底 —— 压缩 error 细节而不是切坏 JSON
+        if len(text) > limit and payload.get("error"):
+            err = dict(payload["error"])
+            err["message"] = str(err.get("message") or "")[:400]
+            payload["error"] = err
+            text = json.dumps(payload, ensure_ascii=False)
         return text
 
     def as_tool_message(self, limit: int = MAX_RESULT_CHARS) -> dict:
@@ -253,6 +344,22 @@ def _tool_search_code(ctx: ToolContext, args: Dict[str, Any]) -> dict:
     }
 
 
+def _tool_read_skill_resource(ctx: ToolContext, args: Dict[str, Any]) -> dict:
+    from apps.skills.services import read_skill_resource
+    result = read_skill_resource(args.get("skill_id"), args.get("relative_path"))
+    if not result.get("ok"):
+        raise ToolError(result.get("error_code") or "SKILL_RESOURCE_ERROR", result.get("reason") or "读取技能资源失败")
+    start = args.get("start_line", 1)
+    end = args.get("end_line", start + 199) if type(start) is int else 0
+    if type(start) is not int or type(end) is not int or start < 1 or end < start:
+        raise ToolError("INVALID_ARGUMENT", "行号必须是正整数，结束行不能早于起始行")
+    lines = result["content"].splitlines()
+    end = min(end, start + 199, len(lines))
+    return {"skill_id": args["skill_id"], "relative_path": args["relative_path"],
+            "content": "\n".join(lines[start - 1:end]), "start_line": start, "end_line": end,
+            "total_lines": len(lines), "truncated": end < len(lines)}
+
+
 def _tool_web_search(ctx: ToolContext, args: Dict[str, Any]) -> dict:
     """
     联网搜索：复用 apps/websearch 的现有后端能力（不新增依赖、不新增服务商代码）。
@@ -329,6 +436,7 @@ def _tool_run_command(ctx: ToolContext, args: Dict[str, Any]) -> dict:
 
 
 _TOOL_IMPL = {
+    "read_skill_resource": _tool_read_skill_resource,
     "read_file": _tool_read_file,
     "list_dir": _tool_list_dir,
     "search_code": _tool_search_code,
@@ -392,7 +500,16 @@ def dispatch(ctx: ToolContext, tool: str, args: Dict[str, Any],
 
     impl = _TOOL_IMPL[normalized]
     try:
-        return done(impl(ctx, args))
+        data = impl(ctx, args)
+        if normalized == "run_command" and (
+                data.get("exit_code") != 0 or data.get("timed_out") or data.get("interrupted")):
+            result = done(data)
+            result.ok = False
+            code = ("COMMAND_CANCELLED" if data.get("interrupted") else
+                    "COMMAND_TIMEOUT" if data.get("timed_out") else "COMMAND_FAILED")
+            result.error = {"code": code, "message": "命令未成功完成，请根据退出码和输出修正后再验证"}
+            return result
+        return done(data)
     except ToolError as e:
         logger.info("工具 %s 执行失败：%s / %s", normalized, e.code, e.message)
         return failed(e.to_dict())

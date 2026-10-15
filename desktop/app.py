@@ -21,7 +21,7 @@ from pathlib import Path
 
 #: 应用标识（与安装目录、快捷方式、进程名保持一致）
 APP_NAME = "Aegis"
-__version__ = "1.8.0"
+__version__ = "1.8.1"
 
 #: WebView2 运行时下载地址（常青版引导程序）
 WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"

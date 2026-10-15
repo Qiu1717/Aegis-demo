@@ -7,6 +7,7 @@ apps/llm/providers.py — 大模型服务商预设
     因此底层只需要一套请求与解析代码，切换服务商只改配置不动代码。
 
 免费额度说明（2026-09 核实，平台政策可能调整，请以官方定价页为准）：
+    deepseek    官网注册送额度，V3 系列速度快、性价比高（**默认首选**）
     zhipu       GLM-4-Flash 官方标注永久免费、不限 Token，并发 30
     modelscope  实名用户每天总计 2000 次，单模型动态限流最高 500 次
     siliconflow 提供若干永久免费模型，使用免费模型需完成实名认证
@@ -18,11 +19,25 @@ apps/llm/providers.py — 大模型服务商预设
 """
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 import os
 
 # ── 服务商预设 ────────────────────────────────────────────
 PRESETS: Dict[str, dict] = {
+    "deepseek": {
+        "label": "DeepSeek",
+        "base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+        "candidate_models": ["deepseek-chat", "deepseek-reasoner"],
+        "auth_env": ["DEEPSEEK_API_KEY"],
+        "requires_key": True,
+        "free_note": "官网注册送额度，V3 系列速度快、性价比高",
+        "key_url": "https://platform.deepseek.com/usage",
+        # 是否原生支持 function calling：native / none / unknown
+        "supports_tools": "unknown",
+        "recommended": True,
+    },
     "zhipu": {
         "label": "智谱 GLM",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -35,7 +50,8 @@ PRESETS: Dict[str, dict] = {
         # 是否原生支持 function calling：native / none / unknown
         # 未知时由 client 先走原生 tools，返回 400/404 且提示不支持则自动回退 JSON
         "supports_tools": "unknown",
-        "recommended": True,
+        # 推荐位已归 DeepSeek（配置默认链首），此处仅作为降级备用
+        "recommended": False,
     },
     "modelscope": {
         "label": "魔搭 ModelScope",
@@ -160,6 +176,7 @@ class Provider:
     #: 上下文窗口大小（token 数）。0 / None 表示「未知，按默认策略处理」。
     #: 由厂商配置项 `context_length` 覆盖；缺省时按 model 猜测。
     context_length: int = 0
+    context_length_explicit: bool = False
 
     @property
     def endpoint(self) -> str:
@@ -181,6 +198,12 @@ class Provider:
             return True, ""
         if not self.base_url:
             return False, "未配置 base_url"
+        try:
+            url = urlsplit(self.base_url)
+            if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or url.query or url.fragment:
+                return False, "API 地址必须是无凭据、查询参数的 http(s) Base URL"
+        except ValueError:
+            return False, "API 地址格式无效"
         if self.requires_key and not self.api_key:
             names = " / ".join(AUTH_ENV_MAP.get(self.key, [])) or "LLM_API_KEY"
             return False, (f"缺少 API Key，请到「设置 → 模型服务商」填写，"
@@ -249,13 +272,34 @@ def _resolve_api_key(provider_key: str, cfg: dict, auth_env) -> str:
     """
     密钥解析优先级（设计 §6.2 / 任务书要求）：
         ① config.json / config.user.json 中的 api_key
-        ② 环境变量 AUTH_ENV_MAP[key]
-        ③ 已注册的密钥解析器（GUI 密钥库 keystore）
+        ② 已注册的密钥解析器（GUI 密钥库 keystore）
+        ③ 环境变量 AUTH_ENV_MAP[key]
     """
     return ((cfg.get("api_key") or "").strip()
-            or _first_env(auth_env)
             or resolve_key(provider_key)
+            or _first_env(auth_env)
             or "")
+
+
+def normalize_base_url(value: str) -> str:
+    """允许粘贴 Base URL 或同级模型/对话端点。"""
+    base = str(value or "").strip().rstrip("/")
+    for suffix in ("/chat/completions", "/models"):
+        if base.endswith(suffix):
+            return base[:-len(suffix)].rstrip("/")
+    return base
+
+
+def selected_provider_key(cfg: dict) -> str:
+    """旧链只用于迁移一个选择，不在失败后选择其他服务商。"""
+    if cfg.get("active_provider"):
+        return str(cfg["active_provider"])
+    providers = cfg.get("providers") or {}
+    chain = cfg.get("provider_chain") or list(providers)
+    for key in chain:
+        if key != "offline" and (providers.get(key) or {}).get("enabled", True):
+            return key
+    return "offline"
 
 
 # ── 上下文窗口推断 ────────────────────────────────────────
@@ -328,7 +372,7 @@ def build_provider(key: str,
                    default_timeout: int = 60) -> Provider:
     """
     把配置片段 + 环境变量 + 密钥库合成一个 Provider 实例
-    优先级：cfg.api_key > 环境变量 > 密钥库（keystore）
+    优先级：cfg.api_key > 密钥库（keystore）> 环境变量
     """
     cfg = cfg or {}
     preset = PRESETS.get(key, PRESETS["custom"])
@@ -340,11 +384,15 @@ def build_provider(key: str,
                 or preset["base_url"])
     model = (cfg.get("model")
              or preset["default_model"])
+    try:
+        explicit_context = int(cfg.get("context_length") or 0) > 0
+    except (TypeError, ValueError):
+        explicit_context = False
 
     return Provider(
         key=key,
         label=cfg.get("label") or preset["label"],
-        base_url=base_url,
+        base_url=normalize_base_url(base_url),
         model=model,
         api_key=_resolve_api_key(key, cfg, auth_env),
         enabled=bool(cfg.get("enabled", True)),
@@ -356,6 +404,7 @@ def build_provider(key: str,
         supports_tools=cfg.get("supports_tools") or preset.get("supports_tools", "unknown"),
         # 上下文窗口：显式配置优先，否则按模型名猜测
         context_length=_resolve_context_length(cfg.get("context_length"), model, key),
+        context_length_explicit=explicit_context,
     )
 
 

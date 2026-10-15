@@ -26,7 +26,7 @@ set "PYEXE=%VENV%\Scripts\python.exe"
 set "PIPEXE=%VENV%\Scripts\pip.exe"
 set "PYIEXE=%VENV%\Scripts\pyinstaller.exe"
 REM  版本号需与 desktop\app.py 的 __version__、installer.iss 的 MyAppVersion 保持一致
-set "VERSION=1.8.0"
+set "VERSION=1.8.1"
 set "PATTERN=%TEMP%\aegis-scan-patterns.txt"
 set "HITS=%TEMP%\aegis-scan-hits.txt"
 set "HIT=0"
@@ -84,41 +84,33 @@ if errorlevel 1 (
 echo       依赖安装完成
 echo.
 
-REM ── 步骤 3：构建前密钥扫描 ───────────────────────────────
-REM  扫描对象：apps / static / templates / config / main.py / desktop 的源码类文件。
-REM  不扫 .bat 与 .md：一个是构建脚本自身、一个是文档，都不进安装包，
-REM  且脚本内必须写出被扫描的特征串，扫自己必然误报。
-echo [3/5] 构建前密钥扫描（源码）
-REM  三条特征（写入临时模式文件，避免命令行里的引号被 cmd 吃掉）：
-REM    1. 以 sk- 开头的常见密钥前缀（词首匹配，不会误伤 task- 之类的普通单词）
-REM    2. 代码里 api_key 紧跟等号并直接赋字符串字面量
-REM    3. JSON 里 "api_key" 字段被赋非空字符串字面量（空串不算，避免误报）
-> "%PATTERN%" echo ^\<sk-[A-Za-z0-9_-]*
->> "%PATTERN%" echo api_key[ ]*[:=][ ]*["'][A-Za-z0-9_-][A-Za-z0-9_-]*["']
->> "%PATTERN%" echo "api_key"[ ]*:[ ]*["'][A-Za-z0-9_-][A-Za-z0-9_-]*["']
-
-if exist "%HITS%" del /q "%HITS%" 2>nul
-for %%D in ("%ROOT%\apps" "%ROOT%\static" "%ROOT%\templates" "%ROOT%\config" "%ROOT%\desktop") do (
-    findstr /S /I /M /R /G:"%PATTERN%" "%%~D\*.py" "%%~D\*.js" "%%~D\*.html" "%%~D\*.css" "%%~D\*.json" "%%~D\*.txt" "%%~D\*.iss" "%%~D\*.spec" "%%~D\*.cfg" "%%~D\*.ini" "%%~D\*.toml" "%%~D\*.yml" "%%~D\*.yaml" >> "%HITS%" 2>nul
-    if not errorlevel 1 set "HIT=1"
+REM ── 步骤 3：发布前安全校验 ───────────────────────────────
+REM  改用 prepublish_check.py（Python）做校验，比原先的 findstr 模式更准确：
+REM    1. 敏感文件检查（.env / 密钥库 / 数据库 / 日志 / 私钥…）
+REM    2. 密钥形态检查（OpenAI / Google / AWS / GitHub / Slack / 智谱 / DeepSeek）
+REM    3. 赋值形式检查（api_key = "..." / "token": "..."）
+REM  校验器自身有自测（tests\test_prepublish_check.py，36 断言），
+REM  确认它真能抓到问题、且不会误报正常内容。
+echo [3/5] 发布前安全校验（密钥 / 敏感文件）
+if exist "%ROOT%\prepublish_check.py" (
+    "%PYEXE%" "%ROOT%\prepublish_check.py"
+    if errorlevel 1 (
+        echo.
+        echo [失败] 发布前安全校验未通过，构建已中止。
+        echo        请按上方提示处理后重试。常见原因：
+        echo          · 源码里写了真实 API Key —— 改用「设置面板填写」或系统密钥库
+        echo          · 本地配置文件（.env / config.user.json / *.db）被 git 跟踪了
+        exit /b 1
+    )
+) else (
+    echo       [警告] 未找到 prepublish_check.py，跳过安全校验
 )
-findstr /I /M /R /G:"%PATTERN%" "%ROOT%\main.py" "%ROOT%\.env" >> "%HITS%" 2>nul
-if not errorlevel 1 set "HIT=1"
-
-if "%HIT%"=="1" (
-    echo.
-    echo [失败] 密钥扫描命中：源码中存在疑似硬编码密钥，构建已中止。
-    echo        命中文件如下，请改为「设置面板填写」或「系统密钥库」，切勿入库：
-    type "%HITS%"
-    echo.
-    echo        参照 docs\README.md 与 desktop\README-打包与分发.md 的密钥处理约定。
-    exit /b 1
-)
-echo       未发现硬编码密钥，继续构建
+echo       安全校验通过，继续构建
 echo.
 
 REM ── 步骤 4：PyInstaller 打包 ─────────────────────────────
 echo [4/5] PyInstaller 打包（onedir + GUI 模式），预计 2 ~ 6 分钟
+
 if exist "%ROOT%\dist\Aegis" (
     echo       清理上一次的产物
     rmdir /s /q "%ROOT%\dist\Aegis" 2>nul

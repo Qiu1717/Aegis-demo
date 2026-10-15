@@ -12,6 +12,7 @@ apps/settings/services.py — 服务商配置、密钥保存、测试连接、�
     · 详细异常只写日志，前端只拿 code / reason / action。
 """
 import json
+import math
 import os
 import re
 import time
@@ -34,11 +35,11 @@ from apps.security import keystore
 from apps.security import redact
 
 # ── 常量 ──────────────────────────────────────────────────
-#: 推荐服务商（智谱 GLM，GLM-4-Flash 永久免费）
-RECOMMENDED_KEY = "zhipu"
+#: 推荐服务商（DeepSeek：速度快、性价比高，注册即送额度）
+RECOMMENDED_KEY = "deepseek"
 
 #: 默认故障切换链（offline 恒保留在末尾，不可移除）
-DEFAULT_CHAIN = ["zhipu", "modelscope", "siliconflow", "offline"]
+DEFAULT_CHAIN = ["deepseek", "zhipu", "modelscope", "siliconflow", "offline"]
 
 #: 前端回传的「未修改」占位（掩码形态，含省略号）
 MASK_MARK = "..."
@@ -138,7 +139,7 @@ def _is_masked(value: Optional[str]) -> bool:
     """前端回传的是否为掩码（表示「未修改」）"""
     if not value or not isinstance(value, str):
         return True
-    return MASK_MARK in value
+    return MASK_MARK in value or "…" in value or set(value.strip()) <= {"*", "•"}
 
 
 # ── 服务商视图 ────────────────────────────────────────────
@@ -227,10 +228,7 @@ def get_providers() -> Dict[str, Any]:
         if key not in ordered and key != "offline":
             ordered.append(key)
 
-    active = _llm_section().get("active_provider") or RECOMMENDED_KEY
-    # 当前选中的厂商若被删了，回落到链首可用项，避免 active 指向不存在的 key
-    if active in hidden or (active not in ordered and active != "offline"):
-        active = ordered[0] if ordered else (RECOMMENDED_KEY if RECOMMENDED_KEY not in hidden else "offline")
+    active = llm_providers.selected_provider_key(_llm_section())
 
     return {
         "active": active,
@@ -245,6 +243,8 @@ def get_providers() -> Dict[str, Any]:
         "keystore": keystore.describe(),
         "active_label": _active_label(),
         "permission_mode": get_permission_mode(),
+        "temperature": _llm_section().get("temperature", 0.7),
+        "max_tokens": _llm_section().get("max_tokens", 4096),
     }
 
 
@@ -299,11 +299,11 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload 约定::
 
         {
-          "active": "zhipu",                       # 可选
-          "chain": ["zhipu", "modelscope"],        # 可选，offline 自动补末尾
+          "active": "deepseek",                     # 可选
+          "chain": ["deepseek", "zhipu"],           # 可选，offline 自动补末尾
           "providers": [                           # 可选
-            {"key":"zhipu", "enabled":true, "base_url":"...",
-             "model":"glm-4-flash", "api_key":"<明文或留空>", "timeout":60}
+            {"key":"deepseek", "enabled":true, "base_url":"...",
+             "model":"deepseek-chat", "api_key":"<明文或留空>", "timeout":60}
           ],
           "workspace": "C:\\\\Users\\\\me\\\\project"      # 可选
         }
@@ -311,6 +311,23 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
     api_key 留空或为掩码表示「不修改已保存的密钥」。
     """
     payload = payload if isinstance(payload, dict) else {}
+    # 先验证，避免参数无效时已写入密钥或删除厂商。
+    ranges = {"temperature": (0, 2), "max_tokens": (1, 4_000_000)}
+    incoming_items = payload.get("providers") or []
+    if isinstance(incoming_items, dict):
+        incoming_items = list(incoming_items.values())
+    checks = [(field, payload[field], low, high) for field, (low, high) in ranges.items() if field in payload]
+    if isinstance(incoming_items, list):
+        for item in incoming_items:
+            if isinstance(item, dict):
+                checks.extend((field, item[field], low, high) for field, low, high in
+                              (("timeout", 5, 600), ("context_length", 0, 4_000_000)) if field in item)
+    for field, value, low, high in checks:
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or not low <= value <= high
+                or (field != "temperature" and int(value) != value)):
+            return {"ok": False, "error": {"code": "BAD_REQUEST", "reason": "%s 数值无效" % field,
+                                          "action": "请检查设置范围后再保存"}}
     user_cfg = read_user_config()
 
     llm_user = user_cfg.get("llm")
@@ -331,8 +348,7 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
     invalid_providers: List[Dict[str, str]] = []
 
     # ── 删除厂商 ────────────────────────────────────────
-    # 允许删除**任意**厂商（含内置预设），只有 offline 例外 ——
-    # 它是「永不停止服务」的最后兜底，删掉会让断网时彻底不可用。
+    # 删除厂商时保留禁用标记，防止默认配置深合并后又重新启用。
     # 实际使用 Aegis 的人都是自带 API Key 接自己的中转/私有模型，
     # 内置那几档用不上却删不掉，属于强加约束。
     #
@@ -345,11 +361,13 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
             rkey = str(rkey or "").strip()
             if not rkey or rkey == "offline":
                 continue
-            providers_user.pop(rkey, None)
-            if rkey in PRESETS:
-                hidden = [k for k in _hidden_providers() if k != rkey]
+            providers_user[rkey] = {"enabled": False}
+            hidden = list(llm_user.get("hidden_providers", _hidden_providers()))
+            if rkey not in hidden:
                 hidden.append(rkey)
-                llm_user["hidden_providers"] = hidden
+            llm_user["hidden_providers"] = hidden
+            if rkey == llm_providers.selected_provider_key(dict(_llm_section(), **llm_user)):
+                llm_user["active_provider"] = "offline"
             try:
                 keystore.delete_key(rkey)
             except Exception:
@@ -370,8 +388,8 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         # 重新添加曾被删除的预设厂商 → 从隐藏名单里移除，恢复显示。
         # 没有这一步的话，用户删掉 zhipu 后再也无法加回来。
-        if key in PRESETS and key in set(_hidden_providers()):
-            llm_user["hidden_providers"] = [k for k in _hidden_providers() if k != key]
+        if key in set(llm_user.get("hidden_providers", _hidden_providers())):
+            llm_user["hidden_providers"] = [k for k in llm_user.get("hidden_providers", _hidden_providers()) if k != key]
 
         entry = providers_user.get(key)
         if not isinstance(entry, dict):
@@ -389,7 +407,7 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
         if "enabled" in item:
             entry["enabled"] = bool(item.get("enabled"))
         if isinstance(base_url_in, str) and base_url_in.strip():
-            entry["base_url"] = base_url_in.strip()
+            entry["base_url"] = llm_providers.normalize_base_url(base_url_in)
         label = item.get("label")
         if isinstance(label, str) and label.strip():
             entry["label"] = label.strip()
@@ -400,11 +418,10 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(timeout, (int, float)) and timeout > 0:
             entry["timeout"] = int(timeout)
 
-        # 上下文窗口（token）：>0 才落库；缺省或 0 表示「按模型自动推断」，
-        # 由 providers.build_provider() 依据模型名给默认值。
+        # 0 必须落库，才能覆盖之前显式设置的窗口并恢复默认预算。
         ctx_len = item.get("context_length")
-        if isinstance(ctx_len, (int, float)) and int(ctx_len) > 0:
-            entry["context_length"] = min(int(ctx_len), 4_000_000)
+        if isinstance(ctx_len, (int, float)):
+            entry["context_length"] = int(ctx_len)
 
         # ── 密钥：写系统凭据区，配置文件只留 key_ref / has_key ──
         api_key = item.get("api_key")
@@ -418,16 +435,13 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 key_failed.append(key)
                 logger.error("保存 %s 的密钥失败或回读校验未通过（本机密钥库不可用）", key)
-        elif api_key is not None and isinstance(api_key, str) and api_key.strip() == "":
-            # 显式清空：删除已保存的密钥
-            if entry.get("has_key"):
-                keystore.delete_key(key)
-            entry["has_key"] = False
-            entry["key_ref"] = ""
 
         providers_user[key] = entry
 
     llm_user["providers"] = providers_user
+    for field in ranges:
+        if field in payload:
+            llm_user[field] = payload[field]
 
     if "chain" in payload:
         llm_user["provider_chain"] = _normalize_chain(payload.get("chain"), providers_user)
@@ -440,22 +454,6 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
                        if k not in removed_keys]
         llm_user["provider_chain"] = _normalize_chain(chain_after)
 
-    # ── 自定义厂商自动入链：已启用且已配密钥的条目补到 offline 之前 ──
-    chain_now = llm_user.get("provider_chain")
-    if not isinstance(chain_now, list) or not chain_now:
-        chain_now = _normalize_chain(_chain())
-    chain_dirty = False
-    for ckey, centry in providers_user.items():
-        if (ckey not in PRESETS and ckey != "offline"
-                and centry.get("enabled")
-                and (centry.get("has_key") or centry.get("key_ref"))
-                and ckey not in chain_now):
-            idx = chain_now.index("offline") if "offline" in chain_now else len(chain_now)
-            chain_now.insert(idx, ckey)
-            chain_dirty = True
-    if chain_dirty:
-        llm_user["provider_chain"] = _normalize_chain(chain_now)
-
     active = payload.get("active")
     if isinstance(active, str) and active.strip():
         akey = active.strip()
@@ -465,6 +463,10 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
         # 尚未包含该厂商，active_provider 不会被写入，导致模型显示回退到链首默认。
         if akey in PRESETS or akey in providers_user or akey in _providers_section():
             llm_user["active_provider"] = akey
+
+    if not llm_user.get("active_provider"):
+        effective = dict(_llm_section(), **llm_user)
+        llm_user["active_provider"] = llm_providers.selected_provider_key(effective)
 
     user_cfg["llm"] = llm_user
     user_cfg["version"] = USER_CFG_VERSION
@@ -528,12 +530,6 @@ def list_models(provider_key: str,
         if base_url:
             cfg["base_url"] = base_url
 
-    if not str(cfg.get("base_url") or "").strip():
-        return {"ok": False,
-                "error": {"code": "NO_PROVIDER", "reason": "请先填写 API 地址",
-                          "action": "在自定义厂商里填写 Base URL 后再拉取"},
-                "models": []}
-
     secret = ""
     if api_key and not _is_masked(api_key):
         secret = api_key.strip()
@@ -542,14 +538,25 @@ def list_models(provider_key: str,
     cfg["api_key"] = secret
 
     # 探测自定义端点时借 "custom" 预设的字段（base_url 是 OpenAI 兼容的 /v1 形态）
-    pkey = "custom" if key == "__custom_probe__" else key
+    pkey = key
     provider = build_provider_from(cfg, pkey)
+    if key == "__custom_probe__":
+        # 未保存的新端点不能借用其他厂商的已保存密钥。
+        provider.api_key = secret
+        provider.requires_key = False
+    ok, reason = provider.availability()
+    if not ok:
+        code = "NO_KEY" if provider.requires_key and not provider.api_key else "NO_PROVIDER"
+        info = _public_error(code)
+        info["reason"] = reason
+        return {"ok": False, "error": info, "models": []}
 
     # 组装 {base_url}/models —— provider.endpoint 指向的是 chat/completions，
     # 这里要的是同级的 models 端点，所以从 base_url 拼而不是复用 endpoint。
-    base = str(cfg.get("base_url") or "").rstrip("/")
+    base = provider.base_url
     url = base + "/models"
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers.update(provider.extra_headers or {})
     if secret:
         headers["Authorization"] = "Bearer %s" % secret
         redact.register_secret(secret)
@@ -557,25 +564,26 @@ def list_models(provider_key: str,
     started = time.time()
     try:
         resp = requests.get(url, headers=headers,
-                            timeout=(6, _MODELS_TIMEOUT))
+                            timeout=(6, _MODELS_TIMEOUT), allow_redirects=False)
     except Exception as e:
         logger.warning("拉取模型列表 %s 异常：%s", pkey, type(e).__name__)
-        return {"ok": False, "error": sec_errors.classify(e),
+        return {"ok": False, "error": _public_error(e),
                 "models": _preset_models(key), "source": "preset",
                 "latency_ms": int((time.time() - started) * 1000)}
 
     latency_ms = int((time.time() - started) * 1000)
 
     if resp.status_code != 200:
-        detail = (resp.text or "")[:160].replace("\n", " ").strip()
-        logger.info("拉取模型列表 %s 未成功：HTTP %s %s", pkey,
-                    resp.status_code, detail)
-        # 端点不支持不是致命错误：回退到预设候选，用户仍可手填模型名
+        logger.info("拉取模型列表 %s 未成功：HTTP %s", pkey, resp.status_code)
+        info = _public_error(resp.status_code)
+        if resp.status_code in (404, 405, 501):
+            info = {"code": "MODELS_UNAVAILABLE", "reason": "模型列表端点不可用（HTTP %s）" % resp.status_code,
+                    "action": "检查 Base URL；该端点可能不支持列模型，可手动填写模型名"}
+        elif resp.status_code in (400, 422):
+            info = {"code": "BAD_REQUEST", "reason": "模型列表请求被拒绝（HTTP %s）" % resp.status_code,
+                    "action": "检查 Base URL 与服务商的接口格式"}
         return {"ok": False,
-                "error": {"code": "MODELS_UNAVAILABLE",
-                          "reason": "该地址未提供 /models 接口（HTTP %s），可手动填写模型名"
-                                    % resp.status_code,
-                          "action": "手动填写模型名称，或检查 API 地址是否正确"},
+                "error": info,
                 "models": _preset_models(key), "source": "preset",
                 "latency_ms": latency_ms}
 
@@ -599,6 +607,11 @@ def list_models(provider_key: str,
     elif isinstance(data, list):
         items = data
 
+    if not isinstance(items, list):
+        return {"ok": False, "error": {"code": "BAD_RESPONSE", "reason": "模型列表响应缺少 data 数组",
+                                      "action": "检查 Base URL 是否为 OpenAI 兼容端点"},
+                "models": _preset_models(key), "source": "preset", "latency_ms": latency_ms}
+
     models: List[str] = []
     if isinstance(items, list):
         for it in items:
@@ -614,17 +627,26 @@ def list_models(provider_key: str,
             if name and name not in models:
                 models.append(name)
 
-    if not models:
-        models = _preset_models(key)
-        source = "preset"
-    else:
-        source = "remote"
-        if len(models) > _MODELS_LIMIT:
-            models = models[:_MODELS_LIMIT]
+    if items and not models:
+        return {"ok": False, "error": {"code": "BAD_RESPONSE", "reason": "模型列表中没有有效模型标识",
+                                      "action": "检查服务商模型列表的响应格式"},
+                "models": _preset_models(key), "source": "preset", "latency_ms": latency_ms}
+    source = "remote"
+    if len(models) > _MODELS_LIMIT:
+        models = models[:_MODELS_LIMIT]
 
     models.sort(key=str.lower)
     return {"ok": True, "models": models, "source": source,
             "latency_ms": latency_ms, "count": len(models)}
+
+
+def _public_error(status_or_exc) -> Dict[str, Any]:
+    """不向 UI 返回远端原文，也不承诺自动换服务商。"""
+    info = sec_errors.classify(status_or_exc)
+    info.pop("detail", None)
+    if info["code"] in ("RATE_LIMIT", "SERVER_ERROR"):
+        info["action"] = "稍后重试；如需更换服务商，请在设置中手动选择"
+    return info
 
 
 def _preset_models(key: str) -> List[str]:
@@ -703,14 +725,14 @@ def test_connection(provider_key: str,
         )
     except Exception as e:
         logger.warning("测试连接 %s 异常：%s", key, type(e).__name__)
-        return {"ok": False, "error": sec_errors.classify(e), "latency_ms": 0}
+        return {"ok": False, "error": _public_error(e), "latency_ms": 0}
 
     latency_ms = int((time.time() - started) * 1000)
 
     if resp.status_code != 200:
         detail = (resp.text or "")[:160].replace("\n", " ").strip()
-        info = sec_errors.classify(resp.status_code, detail)
-        logger.warning("测试连接 %s 失败：HTTP %s %s", key, resp.status_code, detail)
+        info = _public_error(resp.status_code)
+        logger.warning("测试连接 %s 失败：HTTP %s", key, resp.status_code)
         # 顺带把「不支持 tools」的探测结果缓存下来（设计 §1.3）
         if resp.status_code in (400, 404) and _mentions_tools(detail):
             _set_cap(key, {"tools": "none"})
@@ -806,8 +828,8 @@ def set_workspace(path: str) -> Dict[str, Any]:
 
 
 # ── 权限模式（三级）────────────────────────────────────────
-#: 三档权限：完全访问 / 需用户批准 / 仅保留对话
-PERMISSION_MODES = ("full", "approve", "chat")
+#: 四档权限：完全访问 / 需用户批准 / 只读计划 / 仅保留对话
+PERMISSION_MODES = ("full", "approve", "plan", "chat")
 #: 默认权限（与历史行为一致：写操作逐次确认）
 DEFAULT_PERMISSION_MODE = "approve"
 
@@ -876,18 +898,12 @@ def set_thinking_level(level: str) -> Dict[str, Any]:
 
 # ── 首次启动引导 ──────────────────────────────────────────
 def _has_usable_provider() -> bool:
-    """链上是否存在真正可用的服务商（offline 不算）"""
-    for key in _chain():
-        if key == "offline":
-            continue
-        cfg = _providers_section().get(key) or {}
-        if cfg.get("enabled") is False:
-            continue
-        provider = build_provider(key, cfg, int(_llm_section().get("timeout", 60)))
-        ok, _reason = provider.availability()
-        if ok:
-            return True
-    return False
+    """仅检查选中者，其他已配置的服务商不能掩盖选择不可用。"""
+    key = llm_providers.selected_provider_key(_llm_section())
+    if key == "offline" or (key not in PRESETS and key not in _providers_section()):
+        return False
+    provider = build_provider(key, _providers_section().get(key), int(_llm_section().get("timeout", 60)))
+    return provider.availability()[0]
 
 
 def bootstrap() -> Dict[str, Any]:

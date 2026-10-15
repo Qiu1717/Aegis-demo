@@ -18,6 +18,7 @@
     "use strict";
 
     var AUTH = window.AegisAuth;
+    var extras = window.AegisWorkspaceExtras;
 
     function $(id) { return document.getElementById(id); }
 
@@ -31,12 +32,10 @@
     var elMsgs = $("awMsgs");
     var elConvList = $("awConvList");
     var elWsChip = $("awWsChip");
-    var elModelChip = $("awModelChip");
     var elStatus = $("awStatus");
     var elStatusText = $("awStatusText");
     var elPermSelect = $("awPermSelect");
     var elThinkSelect = $("awThinkSelect");
-    var elWebToggle = $("awWebToggle");
     var viewHome = $("awViewHome");
     var viewChat = $("awViewChat");
     var elScroll = $("awScroll");
@@ -63,16 +62,15 @@
     var elTaskEmpty = $("awTaskEmpty");
 
     /* sessionId：当前会话；sending：是否有任务在跑（唯一的发送按钮控制位）；
-       webEnabled：「联网搜索」开关（默认开，关闭后后端不把 web_search 放进工具表）。
        hasWorkspace：是否已设置工作区 —— 决定编码类卡片是否可用。
        lastPrompt / retryable：失败重试所需的上下文。
        markStopped：本轮的「用户主动停止」标记写入器，由 send() 每轮重建。
        存在的理由：停止走的是 AbortError 分支，与「超时中止」共用同一条 catch，
        若不区分就会把用户主动停止误报成「任务超时未结束」。 */
-    var state = { sessionId: null, sending: false, webEnabled: true,
+    var state = { sessionId: null, sending: false,
                   awaitingApproval: false, approvalSince: 0,
                   hasWorkspace: false, lastPrompt: "", retryable: false,
-                  markStopped: null, newIntent: 0 };
+                  markStopped: null, newIntent: 0, lastAttachments: [] };
 
     /* 单次任务等待的硬上限（毫秒）。需大于后端的审批等待上限
        （DEFAULT_APPROVAL_TIMEOUT = 300s），避免误伤正常的审批等待；
@@ -305,28 +303,6 @@
         elInput.style.height = Math.min(elInput.scrollHeight, 200) + "px";
     }
 
-    /* 「联网搜索」开关（与旧 main.js 同源语义）
-       开：Agent 工具表里带 web_search，可联网检索最新资料；
-       关：请求体 use_web=false，后端不把该工具放进工具表，全程零网络请求。
-       点击只改内存状态，不需要发请求，因此这里不可能失败导致卡死。 */
-    function setWebEnabled(on) {
-        state.webEnabled = !!on;
-        if (elWebToggle) {
-            elWebToggle.classList.toggle("is-on", state.webEnabled);
-            elWebToggle.setAttribute("aria-checked", String(state.webEnabled));
-        }
-    }
-
-    if (elWebToggle) {
-        setWebEnabled(state.webEnabled);
-        elWebToggle.addEventListener("click", function () {
-            setWebEnabled(!state.webEnabled);
-            toast(state.webEnabled
-                ? "联网搜索已开启"
-                : "联网搜索已关闭，本次不会再发起任何网络请求");
-        });
-    }
-
     /* 唯一的发送按钮控制点：state.sending 或有输入为空 → 置灰。
        它被调用得足够频繁（输入、发送前、收尾），因此内部必须**永不抛异常**，
        否则一次 DOM 差异就把「按钮能否点击」这件事永久锁死（历史 Bug）。 */
@@ -338,7 +314,9 @@
                此前条件是 `state.sending || !has`：只要上一轮还没收尾（后台步骤未跑完、
                流迟迟不关、审批未决……），按钮就一直置灰、悬停显示禁止图标。
                现在改为：有内容就能发；若上一轮仍在跑，send() 会先中止它。 */
-            elSend.disabled = !has;
+            has = has || (extras && extras.files().length > 0);
+            elSend.disabled = !state.sending && (!has || (extras && extras.uploading()));
+            if (extras) extras.setBusy(state.sending);
             /* 生成中把按钮切成「停止」语义：视觉上给出明确反馈，
                也避免用户误以为可以再发一条造成重复提交。 */
             elSend.classList.toggle("is-stop", !!state.sending);
@@ -373,6 +351,10 @@
 
     if (elMenuBtn) {
         elMenuBtn.addEventListener("click", function () {
+            if (window.innerWidth > 900) {
+                window.dispatchEvent(new CustomEvent("aegis:sidebar-toggle"));
+                return;
+            }
             if (elSide && elSide.classList.contains("is-open")) closeDrawer();
             else openDrawer();
         });
@@ -384,17 +366,6 @@
 
     function loadStatus() {
         if (!AUTH) return;
-
-        // 注意：AegisAuth.get 已解包为业务 data（api_ok 的 data 字段），
-        // 这里直接用 res，不要再取 res.data（否则永远是 undefined）。
-        AUTH.get("/api/status").then(function (res) {
-            var d = res || {};
-            var label = d.display || d.active_model || "";
-            if (label === "未配置模型") label = "";
-            if (elModelChip) elModelChip.textContent = label ? ("模型：" + label) : "模型：未配置";
-        }).catch(function () {
-            if (elModelChip) elModelChip.textContent = "模型：未配置";
-        });
 
         AUTH.get("/api/settings/workspace").then(function (res) {
             var d = res || {};
@@ -443,6 +414,7 @@
     /* 拉取序号：并发删除会同时发起多次 loadSessions，若响应乱序返回，
        旧响应会覆盖新结果，导致计数回退（删了又变多）。只接受最大序号的响应。 */
     var sessionsReqSeq = 0;
+    var sessionsRendered = "";
 
     function loadSessions() {
         if (!AUTH) return Promise.resolve();
@@ -465,6 +437,11 @@
     function renderSessions(list) {
         if (!elConvList) return;
         list = list || [];
+        var signature = JSON.stringify([state.sessionId, list.map(function (s) {
+            return [sidOf(s), titleOf(s), isPinnedOf(s), !!s.archived];
+        })]);
+        if (signature === sessionsRendered) return;
+        sessionsRendered = signature;
 
         var main = [];
         var archived = [];
@@ -685,6 +662,9 @@
     }
 
     function confirmDelete(sid) {
+        if (state.sending && String(sid) === String(state.sessionId)) {
+            toast("请先停止当前任务，再删除会话"); return;
+        }
         var run = function () { deleteSession(sid); };
         if (typeof window.showConfirm === "function") {
             window.showConfirm("删除后不可恢复，确定要删除这个会话吗？", "删除会话")
@@ -700,15 +680,21 @@
 
     function openSession(sid) {
         if (!AUTH) return;
+        if (state.sending) { toast("请先停止当前任务，再切换会话"); return; }
         /* 用户主动点了某个会话 → 作废尚未完成的「新建」意图。
            否则 createSessionNow 的异步回调会把 state.sessionId 改写成新会话、
            并可能把视图拉回欢迎页，让用户刚点开的会话凭空消失。 */
         newIntentSeq++;
         state.newIntent = newIntentSeq;
+        var intent = state.newIntent;
         state.sessionId = sid;
+        if (extras) extras.clear();
+        state.lastAttachments = [];
+        if (elMsgs) elMsgs.textContent = "";
         resetTask();
             AUTH.get("/api/aichat/sessions/" + encodeURIComponent(sid) + "/messages")
             .then(function (res) {
+                if (intent !== state.newIntent || String(state.sessionId) !== String(sid)) return;
                 var msgs = res || [];
                 renderMessages(msgs);
                 /* 空会话（刚新建、还没发过任何消息）**显示欢迎页**而不是空白对话区 ——
@@ -719,7 +705,9 @@
                 setStatus("idle", "空闲");
                 return loadSessions();
             })
-            .catch(function () { toast("加载会话失败"); });
+            .catch(function () {
+                if (intent === state.newIntent && String(state.sessionId) === String(sid)) toast("加载会话失败");
+            });
     }
 
     function renderMessages(list) {
@@ -743,10 +731,13 @@
        乐观插入 sessionsCache 顶部并重渲染（与删除的乐观更新对称）。
        失败时回退到「等首次发送时再建」的旧行为，不阻断用户。 */
     function resetNew() {
+        if (state.sending) { toast("请先停止当前任务，再新建会话"); return; }
         /* 「新建」意图标记：createSessionNow 是异步的，回调里要靠它判断
            「用户这段时间有没有改主意去别的会话」，避免把视图强行拉回欢迎页。 */
         state.newIntent = ++newIntentSeq;
         state.sessionId = null;
+        if (extras) extras.clear();
+        state.lastAttachments = [];
         if (elMsgs) elMsgs.textContent = "";
         resetTask();
         hideBusy();
@@ -802,7 +793,10 @@
        若这里再拉一次，会出现旧数据覆盖新数据的闪烁，且并发删除时
        多个 in-flight 请求返回顺序不保证，可能让计数回退。 */
     function resetNewKeepList() {
+        state.newIntent = ++newIntentSeq;
         state.sessionId = null;
+        if (extras) extras.clear();
+        state.lastAttachments = [];
         if (elMsgs) elMsgs.textContent = "";
         resetTask();
         hideBusy();
@@ -973,7 +967,7 @@
 
         if (evt.dangerous) {
             node.appendChild(el("div", "aw-ap-warn",
-                "⚠️ 高风险操作：只允许「允许一次」，不可在本次会话内豁免。"));
+                "高风险操作：只允许「允许一次」，不可在本次会话内豁免。"));
         }
         if (evt.detail) {
             node.appendChild(el("pre", "aw-ap-detail", evt.detail));
@@ -1109,17 +1103,21 @@
             stopRun();
             return;
         }
-        var text = elInput.value.trim();
+        var files = extras ? extras.files() : [];
+        var text = elInput.value.trim() || (files.length ? "请分析所附文件。" : "");
         if (!text) return;
+        if (extras && extras.uploading()) { toast("请等待文件上传完成"); return; }
         if (!AUTH) { toast("鉴权未就绪，请刷新页面"); return; }
 
         var myId = ++runSeq;
         state.sending = true;
         state.lastPrompt = text;
+        state.lastAttachments = files;
         /* 本轮是否被用户主动停止。与 runId 一起构成「这一轮的因果」：
            只有 myId 仍等于当前轮次时才允许改动标记，避免上一轮的收尾
            误标下一轮（并发场景下会导致新请求刚发出就被判为「已停止」）。 */
         var stoppedByUser = false;
+        function isCurrentRun() { return myId === runSeq && !stoppedByUser; }
         var markStopped = function () { if (myId === runSeq) stoppedByUser = true; };
         state.markStopped = markStopped;
         /* 新一轮开始：清掉上一轮遗留的取消标记，避免 cancel 被误判为「已通知」
@@ -1143,7 +1141,8 @@
             elInput.value = "";
             autosize();
             setView("chat");
-            addMsg("user", text);
+            addMsg("user", text + (files.length ? "\n附件：" + files.map(function (f) { return f.name; }).join("、") : ""));
+            if (extras) extras.take();
             answerEl = addMsg("assistant", "");
             resetTask();
             setStatus("running", "运行中");
@@ -1174,6 +1173,7 @@
 
         var lastEventAt = Date.now();
         var stallTimer = setInterval(function () {
+            if (!isCurrentRun()) { clearInterval(stallTimer); return; }
             try {
                 if (state.awaitingApproval) {
                     lastEventAt = Date.now();
@@ -1209,6 +1209,7 @@
         var sessionReady = hasSession ? Promise.resolve(state.sessionId) : Promise.resolve(null);
 
         sessionReady.then(function () {
+            if (!isCurrentRun()) return;
             showTask(text.length > 40 ? text.slice(0, 40) + "…" : text);
         });
 
@@ -1220,16 +1221,19 @@
             signal: controller ? controller.signal : undefined,
             body: JSON.stringify({
                 message: text,
+                attachment_ids: files.map(function (f) { return f.id; }),
                 /* 首轮传 null 让后端自己建，省掉串行等待；
                    已有会话时带上，保证多轮上下文连续。 */
                 session_id: state.sessionId,
                 thinking_level: elThinkSelect ? elThinkSelect.value : "balanced",
                 permission_mode: elPermSelect ? elPermSelect.value : "approve",
-                /* 联网搜索开关：关闭时后端不把 web_search 放进工具表，
-                   本次任务全程零网络请求（与旧 main.js 的 use_web 语义一致）。 */
-                use_web: !!state.webEnabled
+                use_web: true
             })
         }).then(function (resp) {
+            if (!isCurrentRun()) {
+                if (resp.body) return resp.body.cancel();
+                return;
+            }
             if (!resp.ok) {
                 return resp.json().catch(function () { return {}; }).then(function (d) {
                     throw new Error((d && d.msg) || ("HTTP " + resp.status));
@@ -1237,13 +1241,14 @@
             }
             return pump(resp, answerEl,
                 function (full) { acc = full; },
-                function () { lastEventAt = Date.now(); });
+                function () { lastEventAt = Date.now(); }, isCurrentRun);
         });
 
         /* 两条并行链路都结束后才算本轮收尾；sessionReady 已在上面挂了
            独立的 then/catch，不会产生未处理拒绝。 */
         Promise.all([runStarted, sessionReady.catch(function () { return null; })])
             .then(function () {
+            if (!isCurrentRun()) return;
             // 以「界面实际渲染出的文本」为准判空：只要显示过内容就保留，
             // 真正为空才给占位提示（既不覆盖已显示内容，也不把空响应误判为成功）。
             /* 用户主动停止：已渲染的内容**原样保留**（那是花钱跑出来的结果，
@@ -1262,6 +1267,7 @@
             syncCards();
             return loadSessions();
         }).catch(function (err) {
+            if (!isCurrentRun()) return;
             // 该处理函数自身绝不能再抛异常：一旦抛出，后面的复位 .then()
             // 会被跳过，state.sending 再次永久卡死且变成未捕获 rejection。
             try {
@@ -1311,12 +1317,16 @@
             // 无论成功/失败/超时，这里都必须执行，否则发送状态不会复位
             if (watchdog) clearTimeout(watchdog);
             if (stallTimer) clearInterval(stallTimer);
+            if (!isCurrentRun()) return;
             // 只有仍是"自己这一轮"时才清空 activeRun，避免误清新一轮的句柄
             if (activeRun.id === myId) {
                 activeRun.controller = null;
                 activeRun.watchdog = null;
                 activeRun.stallTimer = null;
+                activeRun.taskId = "";
+                activeRun.cancelNotified = false;
             }
+            state.markStopped = null;
             state.awaitingApproval = false;
             state.approvalSince = 0;
             state.sending = false;
@@ -1327,7 +1337,7 @@
     }
 
     /* SSE 解析 */
-    function pump(resp, answerEl, onText, onEvent) {
+    function pump(resp, answerEl, onText, onEvent, isCurrentRun) {
         var reader = resp.body.getReader();
         var decoder = new TextDecoder();
         var buf = "";
@@ -1335,6 +1345,9 @@
 
         function step() {
             return reader.read().then(function (r) {
+                if (!isCurrentRun()) {
+                    return reader.cancel().then(function () { return acc; });
+                }
                 if (r.done) return acc;
                 buf += decoder.decode(r.value, { stream: true });
 
@@ -1374,6 +1387,21 @@
         var t = evt.type;
 
         if (t === "run_start") {
+            if (evt.session_id != null) {
+                state.sessionId = evt.session_id;
+                // 使任务开始前发出的列表请求失效，避免旧默认标题覆盖新标题。
+                sessionsReqSeq++;
+                var session = sessionsCache.filter(function (s) {
+                    return String(sidOf(s)) === String(evt.session_id);
+                })[0];
+                if (!session) {
+                    session = { session_id: evt.session_id };
+                    sessionsCache.unshift(session);
+                }
+                session.session_title = evt.session_title || titleOf(session);
+                if (session.title != null) session.title = session.session_title;
+                renderSessions(sessionsCache);
+            }
             /* 抓住 task_id：没有它就无法在用户点「停止」时通知后端取消。 */
             if (evt.task_id) {
                 activeRun.taskId = String(evt.task_id);
@@ -1383,6 +1411,9 @@
             /* 任务已真正开始（而不是刚点发送），此时才显示「生成中」指示。
                在此之前 ensureSession 可能还要等一会儿网络。 */
             showBusy(evt.title ? ("正在处理：" + evt.title) : "Aegis 正在思考…");
+        } else if (t === "phase") {
+            setStatus("running", evt.title || "处理中");
+            showBusy(evt.title || "Aegis 正在处理…");
         } else if (t === "agent_step") {
             addStep(evt.step, evt.title);
         } else if (t === "tool_call") {
@@ -1527,6 +1558,7 @@
     if (elRetryBtn) {
         elRetryBtn.addEventListener("click", function () {
             if (!state.lastPrompt) { hideRetry(); return; }
+            if (extras) extras.restore(state.lastAttachments);
             if (elInput) {
                 elInput.value = state.lastPrompt;
                 try { autosize(); } catch (e) { /* 忽略 */ }
@@ -1581,6 +1613,7 @@
             }
         });
     }
+    window.addEventListener("aegis:skills-changed", loadSkills);
 
     function renderSkills(list) {
         if (!elSkillList) return;
@@ -1669,6 +1702,8 @@
     function setWsHint(path) {
         var btn = $("awBtnWs");
         if (!btn) return;
+        var label = $("awWsLabel");
+        if (label) label.textContent = path ? path.replace(/\\/g, "/").replace(/\/$/, "").split("/").pop() || path : "选择工作区";
         if (path) {
             btn.title = path;
             btn.setAttribute("aria-label", "工作区：" + path);
@@ -1687,7 +1722,8 @@
         var api = (window.pywebview && window.pywebview.api) || null;
 
         if (!api || typeof api.open_folder_dialog !== "function") {
-            toast("桌面组件未就绪；请到「设置」中填写工作区路径");
+            var path = window.prompt("填写本机工作区目录的完整路径：", btn && btn.title !== "未设置工作区" ? btn.title : "");
+            if (path && path.trim()) applyWorkspace(path.trim());
             return;
         }
         if (btn) btn.disabled = true;
@@ -1752,6 +1788,25 @@
     window.addEventListener("resize", closeMenu);
 
     /* ── 启动 ───────────────────────────────────────────── */
+    window.addEventListener("aegis:attachments-changed", syncSend);
+    if (AUTH && elThinkSelect) {
+        AUTH.get("/api/settings/thinking").then(function (info) { if (info && info.level) elThinkSelect.value = info.level; }).catch(function () {});
+        elThinkSelect.addEventListener("change", function () {
+            AUTH.put("/api/settings/thinking", {level: elThinkSelect.value}).catch(function () { toast("思考量级保存失败，本轮仍使用当前选择"); });
+        });
+    }
+
+    if (AUTH && elPermSelect) {
+        AUTH.get("/api/settings/permission").then(function (info) {
+            if (info && ["approve", "full", "plan", "chat"].indexOf(info.mode) >= 0) {
+                elPermSelect.value = info.mode;
+            }
+        }).catch(function () {});
+        elPermSelect.addEventListener("change", function () {
+            AUTH.put("/api/settings/permission", { mode: elPermSelect.value })
+                .catch(function () { toast("权限模式保存失败，本轮仍使用当前选择"); });
+        });
+    }
 
     if (!AUTH) {
         toast("鉴权脚本未加载，请刷新页面重试");
@@ -1759,6 +1814,17 @@
         loadStatus();
         loadSessions();
     }
+    var sidebarRefreshing = false;
+    function refreshSidebar() {
+        if (document.hidden || sidebarRefreshing) return;
+        sidebarRefreshing = true;
+        loadSessions().then(function () { sidebarRefreshing = false; });
+    }
+    window.addEventListener("focus", refreshSidebar);
+    document.addEventListener("visibilitychange", function () {
+        refreshSidebar();
+    });
+    setInterval(refreshSidebar, 5000);
     syncSend();
     autosize();
     /* 初始化卡片状态：首屏在 loadStatus 返回前，卡片应先呈「无工作区」禁用态，

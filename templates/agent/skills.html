@@ -20,7 +20,8 @@
                     <div class="sk-title">技能中心</div>
                     <div class="sk-sub">
                         已启用的技能会注入本次任务的提示词；模型采用该技能时会在回复中标注「[技能:名称]」，
-                        工作台的时间线会显示调用状态。技能数据保存在本机用户配置中，重启后依然有效。
+                        工作台的时间线会显示调用状态。技能包保存在本机用户数据 skills 目录，重启后依然有效。
+                        导入默认禁用，请检查外部指令后手动启用；不会自动运行包内脚本。
                     </div>
                 </div>
                 <a class="aw-btn" href="/workspace">返回工作台</a>
@@ -37,13 +38,14 @@
             <section class="sk-section">
                 <div class="sk-section-title">从文件导入</div>
                 <p class="sk-hint">
-                    支持本地 <b>.json</b> 文件，可拖拽到下方区域。识别三种形态：单个技能对象、
-                    技能数组，或技能包 <b>{"skills": [...]}</b>。导入前会逐条校验，失败项会给出原因且不中断其余条目。
+                    支持本地 <b>.json</b>、<b>SKILL.md</b> 或含 SKILL.md 的 <b>.zip</b>，可拖拽到下方区域。
+                    JSON 保留单个技能对象、技能数组和 <b>{"skills": [...]}</b> 格式。
+                    技能包完整保存指令及 references/scripts/assets；上传不超过 10 MiB，展开不超过 30 MiB / 1000 项。
                 </p>
 
-                <div class="sk-drop" id="skDrop">
+                <div class="sk-drop" id="skDrop" role="button" tabindex="0" aria-label="选择技能文件">
                     把技能文件拖到这里，或点击选择文件
-                    <input type="file" id="skFile" accept=".json,application/json" hidden>
+                    <input type="file" id="skFile" accept=".json,.md,.zip,application/json,application/zip" hidden>
                 </div>
 
                 <div class="sk-import-row">
@@ -51,8 +53,29 @@
                     <button class="aw-btn aw-btn-primary" id="btnImport" type="button" disabled>导入</button>
                     <button class="aw-btn" id="btnClearFile" type="button" disabled>清除</button>
                 </div>
+                <label class="sk-hint"><input type="checkbox" id="skOverwrite"> 明确覆盖同 ID 的自定义技能（替换原指令与资源）</label>
 
-                <div class="sk-result" id="skImportResult" hidden></div>
+                <div class="sk-result" id="skImportResult" role="status" aria-live="polite" hidden></div>
+            </section>
+
+            <section class="sk-section">
+                <div class="sk-section-title">从 GitHub 下载并导入</div>
+                <p class="sk-hint">
+                    支持公开仓库、tree 技能子目录或 blob SKILL.md 页面链接；自动解析分支并保留同目录资源。
+                    不支持私有仓库认证。下载和注册均成功后才显示已导入，随后需手动启用。
+                </p>
+                <label class="sk-hint" for="skGithubUrl">公开 GitHub 链接</label>
+                <input class="sk-input" id="skGithubUrl" type="url" maxlength="2048"
+                       placeholder="https://github.com/owner/repo/tree/main/skills/example" autocomplete="off" spellcheck="false">
+                <label class="sk-hint"><input type="checkbox" id="skGithubOverwrite"> 明确覆盖同 ID 的自定义技能（替换原指令与资源）</label>
+                <div class="sk-import-row">
+                    <button class="aw-btn aw-btn-primary" id="btnImportGithub" type="button">下载并导入</button>
+                </div>
+                <p class="sk-hint">
+                    启用后注入完整指令。包内文本资源通过技能资源读取工具受限读取（最多 128 KiB）；
+                    普通文件工具仍只读取授权工作区，技能导入不会扩大工作区沙箱。二进制资产保留但不作文本读取。
+                </p>
+                <div class="sk-result" id="skGithubResult" role="status" aria-live="polite" hidden></div>
             </section>
 
             <!-- ── 注册新技能 ──────────────────────────────── -->

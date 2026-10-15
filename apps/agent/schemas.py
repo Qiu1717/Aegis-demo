@@ -182,6 +182,22 @@ RUN_COMMAND_SCHEMA: Dict[str, Any] = {
     },
 }
 
+READ_SKILL_RESOURCE_SCHEMA: Dict[str, Any] = {
+    "name": "read_skill_resource",
+    "description": "只读获取用户已启用技能包中的参考文档、脚本源代码或文本资源；不会执行脚本或读取任意本机文件。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "skill_id": {"type": "string", "description": "已启用技能的标识"},
+            "relative_path": {"type": "string", "description": "包内相对路径，如 references/guide.md"},
+            "start_line": {"type": "integer", "minimum": 1},
+            "end_line": {"type": "integer", "minimum": 1},
+        },
+        "required": ["skill_id", "relative_path"],
+        "additionalProperties": False,
+    },
+}
+
 #: 发给大模型的完整 tools 数组（OpenAI function calling 格式）
 #: 含 web_search；运行时由 build_tool_schemas(web_enabled) 按联网开关裁剪。
 TOOL_SCHEMAS: List[Dict[str, Any]] = [
@@ -194,6 +210,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         WRITE_FILE_SCHEMA,
         EDIT_FILE_SCHEMA,
         RUN_COMMAND_SCHEMA,
+        READ_SKILL_RESOURCE_SCHEMA,
     )
 ]
 
@@ -207,6 +224,7 @@ TOOL_SCHEMA_MAP: Dict[str, Dict[str, Any]] = {
         WRITE_FILE_SCHEMA,
         EDIT_FILE_SCHEMA,
         RUN_COMMAND_SCHEMA,
+        READ_SKILL_RESOURCE_SCHEMA,
     )
 }
 
@@ -221,7 +239,8 @@ LOCAL_TOOL_NAMES: List[str] = [
 
 
 def build_tool_schemas(web_enabled: bool = True,
-                       local_enabled: bool = True) -> List[Dict[str, Any]]:
+                       local_enabled: bool = True,
+                       skill_enabled: bool = False) -> List[Dict[str, Any]]:
     """
     按「联网开关」与「是否需要工作区上下文」裁剪发给模型的 tools 数组。
 
@@ -239,6 +258,8 @@ def build_tool_schemas(web_enabled: bool = True,
         names.extend(LOCAL_TOOL_NAMES)
     if web_enabled:
         names.append(WEB_TOOL_NAME)
+    if skill_enabled:
+        names.append("read_skill_resource")
     return [{"type": "function", "function": TOOL_SCHEMA_MAP[name]}
             for name in names if name in TOOL_SCHEMA_MAP]
 
@@ -260,6 +281,7 @@ TOOL_ALIASES: Dict[str, str] = {
 
 #: 工具的中文标签（UI 展示）
 TOOL_LABELS: Dict[str, str] = {
+    "read_skill_resource": "读取技能资源",
     "read_file": "读取文件",
     "list_dir": "列出目录",
     "search_code": "检索代码",
@@ -271,6 +293,7 @@ TOOL_LABELS: Dict[str, str] = {
 
 #: 工具的基础风险分级（run_command 实际风险由 approval.classify_command 动态判定）
 TOOL_RISK: Dict[str, str] = {
+    "read_skill_resource": RISK_READONLY,
     "read_file": RISK_READONLY,
     "list_dir": RISK_READONLY,
     "search_code": RISK_READONLY,

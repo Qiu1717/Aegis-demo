@@ -31,6 +31,7 @@ from apps.skills import services as skills_services
 from apps.guard import services as guard_services
 
 from . import agent_bp
+from . import attachments
 from .approval import (
     DECISION_ALLOW_ONCE,
     DECISION_ALLOW_SESSION,
@@ -149,6 +150,58 @@ def _ensure_session(session_id):
 
 
 # ── 启动 Agent 任务（SSE）──────────────────────────────────
+@agent_bp.route("/attachments", methods=["POST"])
+def upload_attachment():
+    try:
+        if request.content_length and request.content_length > attachments.MAX_BYTES + 65536:
+            return api_fail("文件不能超过 2 MiB", code=400)
+        return api_ok(attachments.save_upload(request.files.get("file")), msg="文件已添加")
+    except ValueError as e:
+        return api_fail(str(e), code=400)
+    except Exception:
+        logger.exception("添加文件失败")
+        return api_fail("添加文件失败，请查看日志", code=500)
+
+
+@agent_bp.route("/attachments/<attachment_id>", methods=["DELETE"])
+def remove_attachment(attachment_id):
+    try:
+        attachments.remove(attachment_id)
+        return api_ok({}, msg="附件已移除")
+    except ValueError as e:
+        return api_fail(str(e), code=400)
+    except Exception:
+        logger.exception("移除附件失败")
+        return api_fail("移除附件失败", code=500)
+
+
+@agent_bp.route("/appearance", methods=["GET", "PUT"])
+def appearance():
+    try:
+        cfg = settings_services.read_user_config()
+        values = {"theme": "system", "font_size": 14, "sidebar_collapsed": False, "task_details": True}
+        values.update(cfg.get("appearance") or {})
+        if request.method == "PUT":
+            updates = request.get_json() or {}
+            for key, value in updates.items():
+                if key == "theme" and value in ("system", "light", "dark"):
+                    pass
+                elif key == "font_size" and type(value) is int and 12 <= value <= 20:
+                    pass
+                elif key in ("sidebar_collapsed", "task_details") and type(value) is bool:
+                    pass
+                else:
+                    return api_fail("外观设置无效", code=400)
+            values.update(updates)
+            cfg["appearance"] = values
+            if not settings_services.write_user_config(cfg):
+                return api_fail("外观设置保存失败", code=500)
+        return api_ok(values)
+    except Exception:
+        logger.exception("外观设置失败")
+        return api_fail("外观设置失败，请查看日志", code=500)
+
+
 @agent_bp.route("/run", methods=["POST"])
 def run():
     """启动一次 Agent 任务；返回 SSE 事件流"""
@@ -160,7 +213,7 @@ def run():
         auto_approve_write = bool(data.get("auto_approve_write", False))
         # 权限模式：请求未带时取已保存的设置（默认 approve）
         permission_mode = str(data.get("permission_mode") or "").strip().lower()
-        if permission_mode not in ("full", "approve", "chat"):
+        if permission_mode not in ("full", "approve", "plan", "chat"):
             try:
                 from apps.settings import services as settings_services
                 permission_mode = settings_services.get_permission_mode()
@@ -174,6 +227,11 @@ def run():
 
         if not message:
             return api_fail("任务内容不能为空")
+
+        try:
+            message = attachments.task_message(message, data.get("attachment_ids"))
+        except (ValueError, TypeError):
+            return api_fail("附件不可用或超出限制，请重新添加文件（每轮最多 8 个、总计 8 MiB）", code=400)
 
         # ── 内容护栏（apps/guard）：命中即拒答，不再构造 AgentRunner ──
         verdict = _blocked_verdict(message, session_id=session_id)
@@ -210,6 +268,8 @@ def run():
             return api_fail("会话不存在", code=404)
 
         try:
+            aichat_services.update_session_title_if_default(session_id, data.get("message") or "")
+            session = aichat_services.get_session(session_id)
             aichat_services.save_message(session_id, "user", message)
             history = aichat_services.list_messages(session_id)
         except Exception:
@@ -255,6 +315,9 @@ def run():
         def generate():
             try:
                 for event in runner.run():
+                    if event.get("type") == "run_start":
+                        event["session_id"] = session_id
+                        event["session_title"] = session["session_title"]
                     yield _sse(event)
             except Exception:
                 logger.exception("Agent 事件流异常中断 task_id=%s", runner.task_id)

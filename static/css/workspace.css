@@ -2,39 +2,38 @@
    Aegis 工作台 · 样式
    -------------------------------------------------------------
    设计语言：8px 栅格、克制配色、大留白、圆角表面、
-             150ms 悬停过渡、200ms 淡入切换、聚焦主色外发光。
+             中性表面、紧凑操作、清晰焦点轮廓。
    变量前缀 --aw-*（避免与 agent.css 的 --ag-* 冲突）。
    响应式：桌面侧边栏常驻；<=900px 侧边栏转抽屉。
    ============================================================= */
 
 :root {
     /* 品牌与语义色 */
-    --aw-primary: #7C3AED;
-    --aw-primary-hover: #6D28D9;
-    --aw-primary-soft: #F5F3FF;
-    --aw-primary-ring: rgba(124, 58, 237, 0.18);
+    --aw-primary: #292824;
+    --aw-primary-hover: #45433E;
+    --aw-primary-soft: #EDEBE6;
+    --aw-primary-ring: rgba(70, 67, 60, 0.18);
+    --aw-on-primary: #FFFFFF;
 
-    --aw-explore: #3B82F6;
-    --aw-build: #8B5CF6;
-    --aw-review: #10B981;
-    --aw-fix: #F97316;
-    --aw-danger: #EF4444;
+    --aw-review: #526950;
+    --aw-fix: #8B6C3D;
+    --aw-danger: #B74D42;
 
     /* 中性色 */
-    --aw-text: #111827;
-    --aw-text-2: #374151;
-    --aw-text-3: #6B7280;
-    --aw-text-4: #9CA3AF;
-    --aw-border: #E5E7EB;
-    --aw-border-strong: #D1D5DB;
-    --aw-bg: #FFFFFF;
-    --aw-bg-subtle: #F9FAFB;
-    --aw-bg-selected: #F3F4F6;
-    --aw-shadow-card: 0 2px 8px rgba(17, 24, 39, 0.08);
-    --aw-shadow-pop: 0 6px 20px rgba(17, 24, 39, 0.10);
+    --aw-text: #292824;
+    --aw-text-2: #494740;
+    --aw-text-3: #706D65;
+    --aw-text-4: #77746D;
+    --aw-border: #E4E1DA;
+    --aw-border-strong: #C9C5BC;
+    --aw-bg: #FCFBF8;
+    --aw-bg-subtle: #F3F1EC;
+    --aw-bg-selected: #EAE7E0;
+    --aw-shadow-card: 0 2px 6px rgba(41, 40, 36, 0.04);
+    --aw-shadow-pop: 0 12px 40px rgba(41, 40, 36, 0.12);
 
     /* 圆角 */
-    --aw-r-lg: 12px;
+    --aw-r-lg: 14px;
     --aw-r-md: 8px;
     --aw-r-sm: 6px;
     --aw-r-full: 999px;
@@ -93,34 +92,46 @@
 }
 
 html[data-theme="dark"] {
-    --aw-text: #E5E7EB;
-    --aw-text-2: #D1D5DB;
-    --aw-text-3: #9CA3AF;
-    --aw-text-4: #6B7280;
-    --aw-border: #2F3135;
-    --aw-border-strong: #3F4247;
-    --aw-bg: #1B1B1D;
-    --aw-bg-subtle: #161618;
-    --aw-bg-selected: #26262A;
-    --aw-primary-soft: #2A2140;
-    --aw-primary-ring: rgba(139, 92, 246, 0.28);
+    --aw-text: #EEECE6;
+    --aw-text-2: #D2CFC7;
+    --aw-text-3: #AAA69E;
+    --aw-text-4: #9B978F;
+    --aw-border: #383632;
+    --aw-border-strong: #59564F;
+    --aw-bg: #242320;
+    --aw-bg-subtle: #1D1C19;
+    --aw-bg-selected: #34322D;
+    --aw-primary: #E7E3DA;
+    --aw-primary-hover: #FFFFFF;
+    --aw-on-primary: #242320;
+    --aw-primary-soft: #34322D;
+    --aw-primary-ring: rgba(231, 227, 218, 0.22);
+    --aw-review: #A8B59B;
+    --aw-fix: #C7AF83;
+    --aw-danger: #E5978D;
     --aw-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.40);
     --aw-shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.50);
 }
 
 @media (prefers-color-scheme: dark) {
     html:not([data-theme="light"]) {
-        --aw-text: #E5E7EB;
-        --aw-text-2: #D1D5DB;
-        --aw-text-3: #9CA3AF;
-        --aw-text-4: #6B7280;
-        --aw-border: #2F3135;
-        --aw-border-strong: #3F4247;
-        --aw-bg: #1B1B1D;
-        --aw-bg-subtle: #161618;
-        --aw-bg-selected: #26262A;
-        --aw-primary-soft: #2A2140;
-        --aw-primary-ring: rgba(139, 92, 246, 0.28);
+        --aw-text: #EEECE6;
+        --aw-text-2: #D2CFC7;
+        --aw-text-3: #AAA69E;
+        --aw-text-4: #9B978F;
+        --aw-border: #383632;
+        --aw-border-strong: #59564F;
+        --aw-bg: #242320;
+        --aw-bg-subtle: #1D1C19;
+        --aw-bg-selected: #34322D;
+        --aw-primary: #E7E3DA;
+        --aw-primary-hover: #FFFFFF;
+        --aw-on-primary: #242320;
+        --aw-primary-soft: #34322D;
+        --aw-primary-ring: rgba(231, 227, 218, 0.22);
+        --aw-review: #A8B59B;
+        --aw-fix: #C7AF83;
+        --aw-danger: #E5978D;
         --aw-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.40);
         --aw-shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.50);
     }
@@ -148,8 +159,8 @@ body {
 /* ── 侧边栏（历史记录）─────────────────────────────────── */
 
 .aw-side {
-    width: 240px;
-    flex: 0 0 240px;
+    width: 248px;
+    flex: 0 0 248px;
     display: flex;
     flex-direction: column;
     background: var(--aw-bg-subtle);
@@ -158,8 +169,8 @@ body {
 }
 
 .aw-brand {
-    height: 56px;
-    flex: 0 0 56px;
+    height: 64px;
+    flex: 0 0 64px;
     display: flex;
     align-items: center;
     gap: var(--aw-s2);
@@ -170,14 +181,14 @@ body {
     width: 28px;
     height: 28px;
     border-radius: var(--aw-r-sm);
-    background: var(--aw-primary);
-    color: #fff;
+    background: transparent;
+    color: var(--aw-text);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.aw-brand-text { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+.aw-brand-text { font-size: 18px; font-weight: 600; letter-spacing: -0.5px; }
 
 .aw-nav {
     padding: var(--aw-s2);
@@ -305,9 +316,9 @@ body {
 
 /* 置顶项小标记 */
 .aw-conv.is-pinned .aw-conv-text::before {
-    content: "\1F4CC";
+    content: "置顶";
     font-size: 10px;
-    margin-right: var(--aw-s1);
+    margin-right: var(--aw-s2);
     opacity: 0.9;
 }
 
@@ -411,7 +422,7 @@ body {
 }
 .aw-ap-btn:hover { background: var(--aw-bg-selected); }
 .aw-ap-btn.is-primary {
-    background: var(--aw-primary); border-color: var(--aw-primary); color: #fff;
+    background: var(--aw-primary); border-color: var(--aw-primary); color: var(--aw-on-primary);
 }
 .aw-ap-btn.is-primary:hover { background: var(--aw-primary-hover); }
 .aw-ap-btn.is-ghost { background: transparent; }
@@ -510,13 +521,6 @@ body {
     padding: 0 var(--aw-s2) var(--aw-s2);
 }
 
-.aw-side-foot {
-    flex: 0 0 auto;
-    padding: var(--aw-s3) var(--aw-s4);
-    border-top: 1px solid var(--aw-border);
-    display: flex; flex-direction: column; gap: var(--aw-s2);
-}
-
 .aw-chip {
     display: inline-flex; align-items: center; gap: var(--aw-s1);
     max-width: 100%;
@@ -531,8 +535,8 @@ body {
 /* ── 主区 ───────────────────────────────────────────────── */
 
 .aw-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-.aw-scroll { flex: 1 1 auto; overflow-y: auto; }
-.aw-inner { max-width: 800px; margin: 0 auto; padding: 80px var(--aw-s6) var(--aw-s6); }
+.aw-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.aw-inner { max-width: 800px; margin: 0 auto; padding: 40px var(--aw-s8) var(--aw-s6); }
 
 .aw-view { display: none; }
 .aw-view.is-active { display: block; animation: awFade var(--aw-t-page) var(--aw-ease) forwards; }
@@ -542,8 +546,11 @@ body {
     to   { opacity: 1; transform: none; }
 }
 
-.aw-title { margin: 0 0 var(--aw-s2); font-size: 24px; font-weight: 600; letter-spacing: -0.2px; }
-.aw-sub { margin: 0 0 var(--aw-s6); font-size: 14px; color: var(--aw-text-3); }
+.aw-title { margin: 0 0 var(--aw-s3); font-size: 36px; font-weight: 500; letter-spacing: -1px; line-height: 1.4; }
+.aw-sub { margin: 0 0 var(--aw-s8); font-size: 14px; color: var(--aw-text-3); }
+.aw-eyebrow { margin: 0 0 20px; font-size: 11px; letter-spacing: 2px; color: var(--aw-text-3); }
+.aw-main:has(#awViewHome.is-active) .aw-inner { padding-top: clamp(60px, 17vh, 152px); }
+.aw-main:has(#awViewHome.is-active) .aw-scroll { flex: 0 1 auto; }
 
 /* ── 顶栏（智能体配置入口）─────────────────────────────── */
 
@@ -559,11 +566,11 @@ body {
 }
 
 .aw-topbar-left { display: flex; align-items: center; gap: var(--aw-s2); min-width: 0; }
-.aw-topbar-title { font-size: 15px; font-weight: 500; }
+.aw-topbar-title { font-size: 13px; font-weight: 500; color: var(--aw-text-3); }
 .aw-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--aw-s2); }
 
 .aw-menu-btn {
-    display: none;
+    display: flex;
     width: 32px; height: 32px;
     border: 1px solid var(--aw-border);
     border-radius: var(--aw-r-md);
@@ -608,7 +615,7 @@ body {
 }
 
 .aw-status[data-state="running"] { background: var(--aw-primary-soft); color: var(--aw-primary); }
-.aw-status[data-state="done"]    { background: rgba(16,185,129,0.12); color: var(--aw-review); }
+.aw-status[data-state="done"]    { background: var(--aw-bg-selected); color: var(--aw-review); }
 .aw-status[data-state="failed"]  { background: rgba(239,68,68,0.12); color: var(--aw-danger); }
 .aw-status[data-state="paused"]  { background: rgba(249,115,22,0.12); color: var(--aw-fix); }
 
@@ -619,7 +626,7 @@ body {
 .aw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--aw-s4); }
 
 .aw-card {
-    min-height: 120px;
+    min-height: 110px;
     box-sizing: border-box;
     border: 1px solid var(--aw-border);
     border-radius: var(--aw-r-lg);
@@ -628,14 +635,12 @@ body {
     display: flex; flex-direction: column; gap: var(--aw-s2);
     text-align: left; cursor: pointer;
     transition: border-color var(--aw-t-hover) ease,
-                box-shadow var(--aw-t-hover) ease,
-                transform var(--aw-t-hover) ease;
+                background var(--aw-t-hover) ease;
 }
 
 .aw-card:hover {
     border-color: var(--aw-border-strong);
-    box-shadow: var(--aw-shadow-card);
-    transform: translateY(-2px);
+    background: var(--aw-bg-subtle);
 }
 
 /* 按下：立刻给出「已响应」的物理反馈，不等 click 后的异步过程。
@@ -718,13 +723,9 @@ body {
     width: 28px; height: 28px;
     border-radius: var(--aw-r-sm);
     display: flex; align-items: center; justify-content: center;
-    color: #fff;
+    color: var(--aw-text-2);
+    background: var(--aw-bg-subtle);
 }
-
-.aw-card[data-kind="explore"] .aw-card-mark { background: var(--aw-explore); }
-.aw-card[data-kind="build"]   .aw-card-mark { background: var(--aw-build); }
-.aw-card[data-kind="review"]  .aw-card-mark { background: var(--aw-review); }
-.aw-card[data-kind="fix"]     .aw-card-mark { background: var(--aw-fix); }
 
 .aw-card-name { font-size: 14px; font-weight: 500; color: var(--aw-text); }
 .aw-card-desc { font-size: 12px; color: var(--aw-text-3); line-height: 1.5; }
@@ -760,13 +761,13 @@ body {
     box-shadow: inset 0 0 0 1px var(--aw-primary-ring);
 }
 .aw-card[data-run-state="stopped"] .aw-card-state {
-    background: #FEF3C7; color: #92400E;
+    background: var(--aw-bg-selected); color: var(--aw-fix);
 }
 .aw-card[data-run-state="done"] .aw-card-state {
-    background: #DCFCE7; color: #166534;
+    background: var(--aw-bg-selected); color: var(--aw-review);
 }
 .aw-card[data-run-state="failed"] .aw-card-state {
-    background: #FEE2E2; color: #991B1B;
+    background: var(--aw-bg-selected); color: var(--aw-danger);
 }
 
 /* ── 失败重试条 ─────────────────────────────────────── */
@@ -975,23 +976,24 @@ body {
 
 /* ── 消息流 ─────────────────────────────────────────────── */
 
-.aw-msgs { display: flex; flex-direction: column; gap: var(--aw-s4); }
+.aw-msgs { display: flex; flex-direction: column; gap: 28px; }
 .aw-msg { display: flex; gap: var(--aw-s3); }
 
 .aw-msg-avatar {
     flex: 0 0 28px; width: 28px; height: 28px;
     border-radius: var(--aw-r-full);
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 500; color: #fff;
-    background: var(--aw-text-4);
+    font-size: 12px; font-weight: 500; color: var(--aw-text-2);
+    background: var(--aw-bg-selected);
 }
 
-.aw-msg[data-role="user"] .aw-msg-avatar { background: var(--aw-text-2); }
-.aw-msg[data-role="assistant"] .aw-msg-avatar { background: var(--aw-primary); }
+.aw-msg[data-role="user"] .aw-msg-avatar { background: var(--aw-bg-selected); }
+.aw-msg[data-role="assistant"] .aw-msg-avatar { background: var(--aw-primary-soft); }
 
 .aw-msg-body { flex: 1 1 auto; min-width: 0; }
-.aw-msg-role { font-size: 12px; color: var(--aw-text-4); margin-bottom: var(--aw-s1); }
-.aw-msg-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--aw-text); }
+.aw-msg-role { font-size: 12px; color: var(--aw-text-3); margin-bottom: var(--aw-s2); }
+.aw-msg-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--aw-text); line-height: 1.85; }
+.aw-msg[data-role="user"] .aw-msg-text { padding: 12px 16px; background: var(--aw-bg-subtle); border-radius: var(--aw-r-lg); }
 .aw-msg-text.is-error { color: var(--aw-danger); }
 
 .aw-typing {
@@ -1066,7 +1068,7 @@ body {
 .aw-composer-wrap {
     flex: 0 0 auto;
     padding: var(--aw-s3) var(--aw-s6) var(--aw-s6);
-    background: linear-gradient(to top, var(--aw-bg) 70%, transparent);
+    background: var(--aw-bg);
 }
 
 .aw-composer-inner { max-width: 800px; margin: 0 auto; }
@@ -1074,21 +1076,21 @@ body {
 .aw-composer {
     min-height: 56px;
     border: 1px solid var(--aw-border);
-    border-radius: var(--aw-r-lg);
+    border-radius: 18px;
     background: var(--aw-bg);
-    padding: var(--aw-s2) var(--aw-s3);
+    padding: var(--aw-s4);
     display: flex; flex-direction: column; gap: var(--aw-s2);
     transition: border-color var(--aw-t-hover) ease, box-shadow var(--aw-t-hover) ease;
 }
 
 .aw-composer:focus-within {
     border-color: var(--aw-primary);
-    box-shadow: 0 0 0 3px var(--aw-primary-ring);
+    box-shadow: 0 0 0 1px var(--aw-border-strong);
 }
 
 .aw-composer-input {
     flex: 1 1 auto;
-    min-height: 24px; max-height: 200px;
+    min-height: 48px; max-height: 200px;
     border: 0; outline: none; resize: none;
     background: transparent; color: var(--aw-text);
     font-family: inherit; font-size: 14px; line-height: 1.6; padding: 0;
@@ -1149,73 +1151,32 @@ body {
 }
 .aw-composer-bar .aw-chip { flex: 1 1 auto; min-width: 0; }
 
-/* 联网搜索开关：胶囊形状的一次性开关，图标 + 文案 + 状态点。
-   开启态用主色描边 + 浅底 + 主色圆点（与「开 / 关」语义一致），
-   关闭态回到中性灰；所有取值都在 :root 里有定义。 */
-.aw-web-toggle {
-    flex: 0 0 auto;
-    margin-right: auto;               /* 把发送按钮顶到最右 */
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--aw-border);
-    border-radius: var(--aw-r-full);
-    background: var(--aw-bg);
-    color: var(--aw-text-3);
-    font-family: inherit;
-    font-size: 12px;
-    line-height: 1;
-    cursor: pointer;
-    user-select: none;
-    transition: background var(--aw-t-hover) ease,
-                border-color var(--aw-t-hover) ease,
-                color var(--aw-t-hover) ease;
+#awBtnWs { width: auto; max-width: 240px; gap: 6px; padding: 0 8px; }
+#awWsLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#awBtnAttach { font-size: 20px; }
+.aw-attachments { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-attachment { display: inline-flex; gap: 6px; align-items: center; max-width: 100%; padding: 3px 8px; border: 1px solid var(--aw-border); border-radius: var(--aw-r-sm); font-size: 12px; }
+.aw-attachment span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-attachment button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.aw-skill-import { display: grid; gap: 8px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--aw-border); }
+.aw-field-row { display: flex; gap: 8px; min-width: 0; }
+.aw-field-row input { flex: 1; min-width: 0; max-width: none; }
+.aw-skill-import details input { max-width: none; width: 100%; box-sizing: border-box; }
+.aw-skill-import details textarea { box-sizing: border-box; min-height: 100px; border: 1px solid var(--aw-border); margin: 8px 0; }
+.aw-appearance-fields { display: grid; gap: 12px; }
+.aw-appearance-fields select { width: 100%; max-width: none; }
+body { font-size: var(--aw-user-font-size, 14px); }
+.aw-msg, .aw-composer-input { font-size: var(--aw-user-font-size, 14px); }
+body.aw-task-compact .aw-task-body { display: none; }
+@media (min-width: 901px) {
+    body.aw-sidebar-collapsed .aw-side { display: none; }
 }
-
-.aw-web-toggle svg { flex: 0 0 auto; }
-
-.aw-web-toggle:hover {
-    background: var(--aw-bg-selected);
-    border-color: var(--aw-border-strong);
-    color: var(--aw-text);
-}
-
-.aw-web-toggle:focus-visible {
-    outline: none;
-    border-color: var(--aw-primary);
-    box-shadow: 0 0 0 3px var(--aw-primary-ring);
-}
-
-.aw-web-toggle.is-on {
-    border-color: var(--aw-primary);
-    background: var(--aw-primary-soft);
-    color: var(--aw-primary);
-}
-
-.aw-web-toggle.is-on:hover {
-    border-color: var(--aw-primary-hover);
-    color: var(--aw-primary-hover);
-}
-
-/* 开启态末尾的状态点（7px，不占布局抖动：始终保留位置） */
-.aw-web-toggle::after {
-    content: "";
-    width: 7px;
-    height: 7px;
-    margin-left: 2px;
-    border-radius: 50%;
-    background: transparent;
-    transition: background var(--aw-t-hover) ease;
-}
-
-.aw-web-toggle.is-on::after { background: var(--aw-primary); }
 
 .aw-send {
     flex: 0 0 auto; width: 32px; height: 32px;
+    margin-left: auto;
     border: 0; border-radius: var(--aw-r-full);
-    background: var(--aw-primary); color: #fff;
+    background: var(--aw-primary); color: var(--aw-on-primary);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     transition: background var(--aw-t-hover) ease,
@@ -1244,6 +1205,45 @@ body {
 
 .aw-composer-hint { padding: 0 var(--aw-s3); margin-top: var(--aw-s2); font-size: 12px; color: var(--aw-text-4); }
 
+/* 设置弹窗复用按钮类；工作台不加载旧页面的 common.css。 */
+.aegis-modal .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--aw-border);
+    border-radius: var(--aw-r-md);
+    background: var(--aw-bg);
+    color: var(--aw-text-2);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+}
+.aegis-modal .btn:hover { background: var(--aw-bg-selected); }
+.aegis-modal .btn-primary {
+    background: var(--aw-primary);
+    border-color: var(--aw-primary);
+    color: var(--aw-on-primary);
+}
+.aegis-modal .btn-primary:hover { background: var(--aw-primary-hover); }
+.aegis-modal .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.aegis-modal .btn[hidden] { display: none; }
+.aegis-modal .aegis-icon-btn { border: 0; background: transparent; cursor: pointer; }
+.aegis-modal .aegis-chain__no { color: var(--aw-on-primary); }
+.aegis-modal__body > * { flex-shrink: 0; }
+.aegis-modal .aegis-input { box-sizing: border-box; }
+
+:where(button, select, a):focus-visible {
+    outline: 2px solid var(--aw-border-strong);
+    outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aw-view.is-active, .aw-approval, .aw-typing { animation: none; }
+}
+
 /* ── 按钮 ───────────────────────────────────────────────── */
 
 .aw-btn {
@@ -1266,13 +1266,13 @@ body {
 .aw-btn-primary {
     background: var(--aw-primary);
     border-color: var(--aw-primary);
-    color: #fff;
+    color: var(--aw-on-primary);
 }
 
 .aw-btn-primary:hover {
     background: var(--aw-primary-hover);
     border-color: var(--aw-primary-hover);
-    color: #fff;
+    color: var(--aw-on-primary);
 }
 
 .aw-btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -1341,12 +1341,15 @@ body {
 }
 
 @media (max-width: 560px) {
-    .aw-cards { grid-template-columns: 1fr; }
-    .aw-title { font-size: 20px; }
+    #awBtnWs { max-width: 130px; }
+    .aw-field-row { flex-wrap: wrap; }
+    .aw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--aw-s2); }
+    .aw-card { min-height: 100px; padding: var(--aw-s3); }
+    .aw-card-desc { font-size: 11px; }
+    .aw-title { font-size: 26px; }
+    .aw-main:has(#awViewHome.is-active) .aw-scroll { flex: 1 1 auto; }
+    .aw-main:has(#awViewHome.is-active) .aw-inner { padding-top: 32px; }
     .aw-topbar-title { display: none; }
-    /* 窄屏只保留放大镜图标，文案让位给输入框 */
-    .aw-web-toggle { padding: 0 8px; }
-    .aw-web-toggle span { display: none; }
 }
 
 /* ── 降低动效偏好 ───────────────────────────────────────── */

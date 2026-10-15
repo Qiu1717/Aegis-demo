@@ -34,7 +34,6 @@
         loading: false,
         providers: [],     // 后端返回的服务商视图（含掩码）
         presets: [],       // 预设（下拉数据源）
-        chain: [],         // 故障切换链
         active: "",
         current: "",       // 当前编辑的服务商 key
         draft: {},         // { providerKey: { api_key, base_url, model, timeout, enabled } }
@@ -74,13 +73,22 @@
     }
 
     function request(url, opts) {
+        var task;
         if (window.AegisAuth && typeof window.AegisAuth.fetchJSON === "function") {
-            return window.AegisAuth.fetchJSON(url, opts);
+            task = window.AegisAuth.fetchJSON(url, opts);
+        } else if (typeof window.aegisFetch === "function") {
+            task = window.aegisFetch(url, opts).then(function (r) { return r.json(); });
+        } else {
+            task = fetch(url, opts).then(function (r) { return r.json(); });
         }
-        if (typeof window.aegisFetch === "function") {
-            return window.aegisFetch(url, opts).then(function (r) { return r.json(); });
-        }
-        return fetch(url, opts).then(function (r) { return r.json(); });
+        return task.then(function (data) {
+            if (data && Object.prototype.hasOwnProperty.call(data, "data")
+                    && Object.prototype.hasOwnProperty.call(data, "code")) {
+                if (Number(data.code) !== 0) throw new Error(data.msg || "请求失败");
+                return data.data;
+            }
+            return data;
+        });
     }
 
     function $(id) { return document.getElementById(id); }
@@ -125,9 +133,10 @@
                 data = data || {};
                 state.providers = data.providers || [];
                 state.presets = data.presets || state.presets;
-                state.chain = data.chain || [];
                 state.active = data.active || "";
                 state.keystore = data.keystore || null;
+                if ($("stTemp")) $("stTemp").value = data.temperature == null ? 0.7 : data.temperature;
+                if ($("stMaxTokens")) $("stMaxTokens").value = data.max_tokens == null ? 4096 : data.max_tokens;
                 state.loaded = true;
                 if (!state.current && state.providers.length) {
                     state.current = (state.active && findProvider(state.active))
@@ -152,7 +161,7 @@
         var html = "";
         for (var i = 0; i < state.providers.length; i++) {
             var p = state.providers[i];
-            var star = p.recommended ? " ⭐推荐" : "";
+            var star = p.recommended ? " · 推荐" : "";
             var mark = p.has_key ? " · 已配置" : "";
             html += '<option value="' + escAttr(p.key) + '"'
                 + (p.key === state.current ? " selected" : "") + '>'
@@ -224,7 +233,7 @@
         var note = $("stFreeNote");
         if (note) {
             var text = (p && p.free_note) || preset.free_note || "";
-            note.textContent = text ? "ℹ️ " + text : "";
+            note.textContent = text;
             note.hidden = !text;
         }
 
@@ -247,9 +256,9 @@
             var eff = (p && p.context_length_effective) || 0;
             var shown = (p && p.context_length) || 0;
             ctxHint.textContent = shown > 0
-                ? "已显式设置为 " + shown + " token；超出部分的历史会被自动裁剪。"
+                ? "已设置总窗口 " + shown + " token；扣除输出、系统与工具开销后用于历史。设置不能扩展服务商能力。"
                 : (eff > 0
-                    ? "留 0 = 按模型自动推断，当前生效约 " + eff + " token。"
+                    ? "留 0 = 安全默认预算；模型窗口估计约 " + eff + " token。设置不能扩展服务商能力。"
                     : "留 0 = 按模型自动推断；无法识别时按 32768 保守处理。");
         }
 
@@ -258,12 +267,11 @@
            用户根本看不到「删除」这个选项。 */
         var custDel = $("stCustDelBtn");
         if (custDel) {
-            custDel.hidden = !(p && key !== "offline");
+            custDel.hidden = !(p && p.key !== "offline");
             custDel.textContent = (p && p.custom) ? "删除该厂商" : "删除该预设";
         }
 
         renderModels();
-        renderChain();
         renderKeystoreNote();
         clearStatus();
     }
@@ -274,39 +282,12 @@
         var ks = state.keystore;
         var text = "密钥存储：" + (ks.backend_label || ks.backend || "未知");
         if (ks.protection_low) {
-            text += " · ⚠️ 保护级别较低（混淆级），建议改用系统凭据管理器";
+            text += " · 保护级别较低（混淆级），建议改用系统凭据管理器";
         } else {
             text += " · 保护级别高";
         }
         el.textContent = text;
         el.classList.toggle("aegis-warn", !!ks.protection_low);
-    }
-
-    function renderChain() {
-        var ul = $("stChain");
-        if (!ul) return;
-        var html = "";
-        for (var i = 0; i < state.chain.length; i++) {
-            var key = state.chain[i];
-            var p = findProvider(key);
-            var label = (p && p.label) || (key === "offline" ? "本地模式" : key);
-            var isOffline = (key === "offline");
-            html += '<li class="aegis-chain__item" data-key="' + escAttr(key) + '">'
-                + '<span class="aegis-chain__no">' + (i + 1) + "</span>"
-                + '<span class="aegis-chain__label">' + esc(label) + "</span>";
-            if (!isOffline) {
-                html += '<span class="aegis-chain__ops">'
-                    + '<button type="button" class="aegis-icon-btn aegis-btn-xs" data-act="up" aria-label="上移"'
-                    + (i === 0 ? " disabled" : "") + ">▲</button>"
-                    + '<button type="button" class="aegis-icon-btn aegis-btn-xs" data-act="down" aria-label="下移"'
-                    + (i >= state.chain.length - 2 ? " disabled" : "") + ">▼</button>"
-                    + "</span>";
-            } else {
-                html += '<span class="aegis-chain__tag">不可移除</span>';
-            }
-            html += "</li>";
-        }
-        ul.innerHTML = html;
     }
 
     // ── 状态与错误展示 ──────────────────────────────────────
@@ -331,7 +312,7 @@
         if (!box) return;
         var reason = (info && info.reason) || "连接失败";
         var action = (info && info.action) || "";
-        $("stErrorReason").textContent = "⚠️ " + reason;
+        $("stErrorReason").textContent = reason;
         $("stErrorAction").textContent = action ? "下一步：" + action : "";
         box.hidden = false;
         setStatus("fail", reason);
@@ -439,7 +420,7 @@
         var ctxLen = $("stContextLen");
         if (ctxLen) {
             var n = parseInt(ctxLen.value, 10);
-            // 0 表示「按模型自动推断」，不写入以免覆盖后端推断
+            // 显式下发 0，才能重置之前保存的窗口。
             draft.context_length = (n > 0) ? n : 0;
         }
 
@@ -455,17 +436,23 @@
                 timeout: d.timeout || p.timeout || 60,
                 label: p.custom ? (p.label || p.key) : undefined,
             };
-            // 上下文窗口：>0 才下发，0/缺省表示「按模型自动推断」，
-            // 由后端 providers.guess_context_length 决定。
-            if (d.context_length > 0) item.context_length = d.context_length;
-            // 关键：留空时**不要下发 api_key 字段**。
-            // 后端把空字符串解释为「显式清空密钥」（会 delete_key），
-            // 只有字段缺失才是真正的「不修改」。此前下发 "" 导致每次在点保存时
-            // 把已保存的密钥全删掉，表现为「模型未配置」。
+            if (d.context_length != null) item.context_length = d.context_length;
+            // 留空复用服务端已保存的密钥。
             if (d.api_key) item.api_key = d.api_key;
             providers.push(item);
         }
-        return { active: state.current, chain: state.chain, providers: providers };
+        var payload = { active: state.current, providers: providers };
+        if ($("stTemp")) payload.temperature = Number($("stTemp").value);
+        if ($("stMaxTokens")) payload.max_tokens = Number($("stMaxTokens").value);
+        return payload;
+    }
+
+    function checkSaved(data) {
+        if (data.ok === false) throw new Error((data.error && data.error.reason) || "保存失败");
+        if (data.key_failed && data.key_failed.length) throw new Error("密钥保存失败，请检查本机密钥存储后重试");
+        if (data.invalid_providers && data.invalid_providers.length) {
+            throw new Error(data.invalid_providers[0].reason || "厂商配置无效");
+        }
     }
 
     function save(silent) {
@@ -475,8 +462,9 @@
             body: JSON.stringify(payload),
         }).then(function (data) {
             data = data || {};
+            checkSaved(data);
             state.providers = data.providers || state.providers;
-            state.chain = data.chain || state.chain;
+            state.active = data.active || state.active;
             state.keystore = data.keystore || state.keystore;
             // 保存成功后清空明文草稿，避免密钥长期留在内存/页面上
             state.draft = {};
@@ -514,8 +502,9 @@
             method: "PUT",
             body: JSON.stringify(payload || {}),
         }).then(function (data) {
+            checkSaved(data || {});
             state.providers = (data && data.providers) || state.providers;
-            state.chain = (data && data.chain) || state.chain;
+            state.active = (data && data.active) || state.active;
             return data;
         });
     }
@@ -558,7 +547,7 @@
                 api_key: apiKey || undefined
             }),
         }).then(function (res) {
-            var data = (res && res.data) || {};
+            var data = res || {};
             var models = data.models || [];
             if (list) {
                 list.textContent = "";
@@ -615,7 +604,7 @@
                 api_key: apiKey || undefined
             }),
         }).then(function (res) {
-            var data = (res && res.data) || {};
+            var data = res || {};
             var models = data.models || [];
             if (list) {
                 list.textContent = "";
@@ -630,7 +619,9 @@
                 toast("已获取 " + models.length + " 个模型", "success");
             } else {
                 var reason = (data.error && data.error.reason) || "拉取失败";
-                say(reason + (models.length ? "（已回退到内置候选 " + models.length + " 个）" : "，可手动填写模型名"), true);
+                var action = (data.error && data.error.action) || "";
+                say(reason + (action ? "。" + action : "")
+                    + (models.length ? "（内置候选仅供参考 " + models.length + " 个）" : ""), true);
                 toast(reason, "error");
             }
             return data;
@@ -663,19 +654,20 @@
         }
         var entry = { enabled: true, base_url: url, model: model, label: label };
         if (apiKey) entry.api_key = apiKey;
-        var payload = { providers: {} };
+        var payload = { active: key, providers: {} };
         payload.providers[key] = entry;
         request("/api/settings/providers", {
             method: "PUT",
             body: JSON.stringify(payload),
         }).then(function (data) {
             data = data || {};
+            checkSaved(data);
             if (data.invalid_providers && data.invalid_providers.length) {
                 toast("添加失败：" + (data.invalid_providers[0].reason || "配置无效"), "error");
                 return null;
             }
             state.providers = data.providers || state.providers;
-            state.chain = data.chain || state.chain;
+            state.active = data.active || key;
             state.keystore = data.keystore || state.keystore;
             state.draft = {};
             state.current = key;
@@ -685,7 +677,7 @@
                 var el = $(id);
                 if (el) el.value = "";
             });
-            toast("自定义厂商已添加并加入切换链", "success");
+            toast("自定义厂商已添加并选中", "success");
             try { window.dispatchEvent(new CustomEvent("aegis:settings-changed")); } catch (e) { /* 忽略 */ }
             return data;
         }).catch(function (err) {
@@ -713,7 +705,8 @@
             }).then(function (data) {
                 data = data || {};
                 state.providers = data.providers || state.providers;
-                state.chain = data.chain || state.chain;
+                checkSaved(data);
+                state.active = data.active || state.active;
                 state.keystore = data.keystore || state.keystore;
                 state.presets = data.presets || state.presets;
                 state.current = (state.providers[0] && state.providers[0].key) || "offline";
@@ -1675,6 +1668,8 @@
                 if (model) draft.model = model.value.trim();
                 if (apiKey) draft.api_key = apiKey.value;
                 if (timeout) draft.timeout = parseInt(timeout.value, 10) || 60;
+                var ctxLen = $("stContextLen");
+                if (ctxLen) draft.context_length = Math.max(0, parseInt(ctxLen.value, 10) || 0);
 
                 state.current = sel.value;
                 hideKey();
@@ -1716,26 +1711,6 @@
             if (btn) { btn.disabled = false; btn.textContent = "保存"; }
         });
     });
-
-        var chain = $("stChain");
-        if (chain) {
-            chain.addEventListener("click", function (e) {
-                var btn = e.target.closest ? e.target.closest("button[data-act]") : null;
-                if (!btn) return;
-                var li = btn.closest("li[data-key]");
-                if (!li) return;
-                var key = li.getAttribute("data-key");
-                var idx = state.chain.indexOf(key);
-                if (idx < 0) return;
-                var act = btn.getAttribute("data-act");
-                if (act === "up" && idx > 0) {
-                    state.chain.splice(idx - 1, 0, state.chain.splice(idx, 1)[0]);
-                } else if (act === "down" && idx < state.chain.length - 2) {
-                    state.chain.splice(idx + 1, 0, state.chain.splice(idx, 1)[0]);
-                }
-                renderChain();
-            });
-        }
 
         var bannerBtn = $("aegisBannerConfigBtn");
         if (bannerBtn) bannerBtn.addEventListener("click", function () { open(); });

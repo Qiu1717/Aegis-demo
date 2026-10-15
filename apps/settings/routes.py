@@ -129,7 +129,7 @@ def put_workspace():
 
 @settings_bp.route("/permission", methods=["GET"])
 def get_permission():
-    """读取当前权限模式（full / approve / chat）"""
+    """读取当前权限模式（full / approve / plan / chat）"""
     try:
         return api_ok({"mode": services.get_permission_mode(),
                        "modes": list(services.PERMISSION_MODES),

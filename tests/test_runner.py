@@ -107,6 +107,55 @@ def test_completed_without_tool_calls(ws, fake_client):
     assert types[-1] == "done" and types[-2] == "run_end"
 
 
+def test_multiple_native_tool_calls_are_replayed_as_one_exchange(ws, fake_client):
+    """多工具响应必须保持一个 assistant tool_calls 与多个 tool 结果的配对。"""
+    first = [
+        {"type": "tool_delta", "delta": {
+            "index": 0, "id": "call_a", "type": "function",
+            "function": {"name": "read_file",
+                          "arguments": json.dumps({"path": "app.py"})},
+        }},
+        {"type": "tool_delta", "delta": {
+            "index": 1, "id": "call_b", "type": "function",
+            "function": {"name": "list_dir",
+                          "arguments": json.dumps({"path": "."})},
+        }},
+        {"type": "finish"},
+    ]
+    client = fake_client(script=[first, [{"type": "delta", "content": "完成。"}]])
+    r = AgentRunner(workspace=ws, user_task="x", config={})
+    _collect(r.run())
+
+    second_request = client.message_log[1]
+    assistant_calls = [m for m in second_request
+                       if m.get("role") == "assistant" and m.get("tool_calls")]
+    tool_messages = [m for m in second_request if m.get("role") == "tool"]
+    assert len(assistant_calls) == 1
+    assert [c["id"] for c in assistant_calls[0]["tool_calls"]] == ["call_a", "call_b"]
+    assert [m["tool_call_id"] for m in tool_messages] == ["call_a", "call_b"]
+
+
+def test_phase_events_describe_actual_work(ws, fake_client):
+    fake_client(script=[native_tool_events("read_file", {"path": "app.py"})])
+    events = list(AgentRunner(workspace=ws, user_task="分析项目", config={}).run())
+    phases = [e["phase"] for e in events if e["type"] == "phase"]
+    assert phases == ["planning", "executing", "reporting"]
+    assert events[-1]["type"] == "done"
+
+
+def test_paused_cancel_does_not_call_model(ws, fake_client):
+    client = fake_client()
+    r = AgentRunner(workspace=ws, user_task="分析项目", config={})
+    r.pause_event.clear()
+    events = []
+    for event in r.run():
+        events.append(event)
+        if event["type"] == "paused":
+            runner_mod.cancel_task(r.task_id)
+    assert client.calls == 0
+    assert next(e for e in events if e["type"] == "run_end")["stats"]["stopped_by"] == "user"
+
+
 def test_read_edit_run_minimal_flow(ws, ws_root, fake_client):
     """
     T03 核心场景：read → edit → run_command 最小任务可自动跑完

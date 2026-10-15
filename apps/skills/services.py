@@ -88,7 +88,7 @@ def _save_skills(skills: List[Dict[str, Any]]) -> bool:
 
 def _public(skill: Dict[str, Any]) -> Dict[str, Any]:
     """对外视图（不含内部字段）"""
-    return {
+    view = {
         "id": str(skill.get("id") or ""),
         "name": str(skill.get("name") or ""),
         "description": str(skill.get("description") or ""),
@@ -98,6 +98,11 @@ def _public(skill: Dict[str, Any]) -> Dict[str, Any]:
         "built_in": bool(skill.get("built_in")),
         "created_at": str(skill.get("created_at") or ""),
     }
+    if skill.get("package"):
+        from .packages import package_root, RESOURCE_BOUNDARY
+        view.update(package=True, source=str(skill.get("source") or ""),
+                    resource_root=str(package_root(skill["id"])), resource_boundary=RESOURCE_BOUNDARY)
+    return view
 
 
 def list_skills() -> List[Dict[str, Any]]:
@@ -107,11 +112,33 @@ def list_skills() -> List[Dict[str, Any]]:
 
 def get_enabled_skills() -> List[Dict[str, Any]]:
     """已启用技能的注入清单（name + description + instructions）"""
-    return [
-        {"id": s["id"], "name": s["name"], "description": s["description"],
-         "instructions": s["instructions"]}
-        for s in _load_skills() if s.get("enabled") and s.get("type", "prompt") == "prompt"
-    ]
+    enabled = []
+    for skill in _load_skills():
+        if not skill.get("enabled") or skill.get("type", "prompt") != "prompt":
+            continue
+        instructions = skill["instructions"]
+        if skill.get("package"):
+            from .packages import package_instructions
+            instructions = package_instructions(skill)
+        enabled.append({"id": skill["id"], "name": skill["name"],
+                        "description": skill["description"], "instructions": instructions})
+    return enabled
+
+
+def read_skill_resource(skill_id: str, relative_path: str) -> Dict[str, Any]:
+    """读取已启用导入包的登记文本资源；返回 ok/content 或 ok=False/error_code/reason。"""
+    from .packages import IMPORT_LOCK, read_resource
+    if not isinstance(skill_id, str) or not SKILL_ID_OK.fullmatch(skill_id):
+        return {"ok": False, "error_code": "SKILL_ID_INVALID", "reason": "技能标识不合规"}
+    with IMPORT_LOCK:
+        skill = next((s for s in _load_skills() if s.get("id") == skill_id), None)
+        if skill is None:
+            return {"ok": False, "error_code": "SKILL_NOT_FOUND", "reason": "技能不存在"}
+        if not skill.get("enabled"):
+            return {"ok": False, "error_code": "SKILL_NOT_ENABLED", "reason": "请先启用此技能"}
+        if not skill.get("package"):
+            return {"ok": False, "error_code": "SKILL_NOT_PACKAGE", "reason": "此技能不是导入的资源包"}
+        return read_resource(skill, relative_path)
 
 
 def register_skill(name: str, description: str, instructions: str,
@@ -169,6 +196,15 @@ def update_skill(skill_id: str, **fields) -> Dict[str, Any]:
     if target is None:
         return {"ok": False, "reason": "技能不存在：%s" % sid}
 
+    if target.get("package"):
+        from .packages import package_instructions, PackageError
+        if any(key in fields for key in ("name", "description", "instructions")):
+            return {"ok": False, "reason": "技能包内容请通过明确覆盖导入更新"}
+        if fields.get("enabled"):
+            try:
+                package_instructions(target)
+            except PackageError as exc:
+                return {"ok": False, "reason": str(exc)}
     if "enabled" in fields:
         target["enabled"] = bool(fields["enabled"])
     if target.get("built_in"):
@@ -211,7 +247,12 @@ def delete_skill(skill_id: str) -> Dict[str, Any]:
         return {"ok": False, "reason": "技能不存在：%s" % sid}
     if removed.get("built_in"):
         return {"ok": False, "reason": "内置技能不可删除，只能禁用"}
-    if not _save_skills(remaining):
+    if removed.get("package"):
+        from .packages import delete_package
+        saved = delete_package(removed, remaining)
+    else:
+        saved = _save_skills(remaining)
+    if not saved:
         return {"ok": False, "reason": "写入用户配置失败，请查看日志"}
     return {"ok": True, "reason": ""}
 
@@ -311,6 +352,10 @@ def import_skills(raw_data: Any, overwrite: bool = False) -> Dict[str, Any]:
                     break
             if pos is not None and skills[pos].get("built_in"):
                 skipped.append({"index": idx, "name": label, "reason": "内置技能不可覆盖：%s" % sid})
+                continue
+            if pos is not None and skills[pos].get("package"):
+                skipped.append({"index": idx, "name": label,
+                                "reason": "已有完整技能包，请用 SKILL.md/zip/GitHub 明确覆盖导入"})
                 continue
             if pos is not None:
                 skills.pop(pos)

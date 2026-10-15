@@ -1,176 +1,156 @@
 # Aegis
 
-> 桌面端编码智能体 —— 装上就能用，用自己的 API Key 接任意 OpenAI 兼容大模型。
+桌面端编码智能体，用自己的 API Key 连接 OpenAI 兼容模型，在指定工作区内读代码、修改文件、执行命令并验证结果。
 
-Aegis 是一个运行在**本机**的编码智能体：能读代码、改代码、跑命令，多步自主迭代把任务做完。
-不依赖 Docker、不依赖 Node、不需要手动装 Python 环境 —— 下载安装包，双击即用。
+Aegis 在本机运行，模型请求发送到你配置的服务商。Windows 安装版无需手动安装 Python、Node 或 Docker；源码版也可通过浏览器使用。
 
----
+当前版本：**1.8.1**。相比 1.8.0，本版新增外部技能导入、文本/代码附件、只读计划模式、仓库规则加载和外观设置，并修复停止后再发送、模型拉取、工具调用及上下文管理问题。完整变更见 [1.8.1 更新说明](docs/发布说明-1.8.1.md)和[更新日志](CHANGELOG.md)。
 
-## 特性
+## 主要功能
 
 | 能力 | 说明 |
 |---|---|
-| **7 个工具** | 读取文件 / 列出目录 / 检索代码 / 写入文件 / 编辑文件 / 执行命令 / 联网搜索 |
-| **多步自主迭代** | Plan → Observe → Iterate 循环，能自己决定下一步做什么 |
-| **三档权限** | 需用户批准（默认）/ 完全访问 / 仅保留对话（不碰文件） |
-| **变更可回滚** | 完整变更清单，支持单条撤销与全部撤销 |
-| **不会断线** | 多服务商自动降级链 + 本地离线兜底，厂商挂了自动切下一个 |
-| **自带密钥库** | API Key 存系统凭据管理器，配置文件里只留引用 |
-| **工作区沙箱** | 符号链接逃逸、`..` 穿越、大小写绕过均被拦截 |
-| **会话管理** | 侧边栏历史、置顶、重命名、归档、删除 |
+| 编码工具 | 读取文件、列目录、检索代码、写入/编辑文件、执行命令和联网搜索 |
+| 任务执行 | 多步调用工具，按规划、执行、验证和结果整理反馈进度 |
+| 四档权限 | 需用户批准、完全访问、计划模式（只读）、仅保留对话 |
+| 仓库规则 | 加载工作区根目录的 AGENTS.md、CLAUDE.md、.aegis/instructions.md；支持 AGENTS.override.md |
+| 技能扩展 | 内置与自定义技能；支持本地 JSON、SKILL.md、ZIP 和公开 GitHub 链接导入 |
+| 文件附件 | 添加 UTF-8 文本/代码，内容进入模型请求；可在输入框旁选择工作区 |
+| 模型配置 | 配置预设或自定义 OpenAI 兼容服务商、密钥和参数，实际调用选中的单一模型 |
+| 会话管理 | 历史、置顶、重命名、归档、删除；自动标题和侧栏同步 |
+| 外观 | 中性色工作台、浅色/深色/跟随系统、字号、侧栏及任务详情偏好 |
+| 变更管理 | 查看 Agent 产生的变更，支持单条撤销和全部撤销 |
 
----
+联网搜索默认启用，由 Agent 按任务需要和当前权限决定是否调用；纯对话模式不执行工具。没有故障切换链，也不会在失败后自动调用其他服务商。
 
-## 安装与运行
+## 安装与开始使用
 
-### 方式一：安装包（推荐）
+### Windows 安装版
 
-1. 从 [Releases](https://github.com/Qiu1717/Aegis-demo/releases) 下载 `Aegis-Setup-<版本>.exe`
-2. 双击安装
-3. 启动 Aegis，按首启向导填写服务商与 API Key
+1. 从 [Releases](https://github.com/Qiu1717/Aegis-demo/releases) 下载安装程序；本次发布文件为 Aegis-Setup-1.8.1.exe。
+2. 退出正在运行的旧版 Aegis，再安装新版。
+3. 打开设置，选择服务商或添加自定义地址，填写 API Key 和模型名，测试连接。
+4. 在输入框旁选择工作区，设置权限，描述要完成的任务。
 
-> 覆盖升级：直接运行新版安装包即可，`AppId` 固定会就地覆盖，用户数据（会话、配置、密钥）不受影响。
-> 若提示「进程正在使用」，先完全退出 Aegis（含托盘）再重试。
+可以先使用“计划模式（只读）”分析项目，再切换为需批准或完全访问模式，在同一会话中要求实施。导入外部技能后，需要手动启用。
 
-### 方式二：源码运行
+安装版需要 **64 位 Windows 10 1809 及以上**和 **WebView2**。安装包未签名，Windows 可能提示未知发布者。覆盖升级沿用原应用标识，保留用户配置、会话、密钥和技能。
 
-```bash
-# 1. 克隆
+### 源码运行
+
+需要 Python 3.10 及以上。以下命令以 Windows PowerShell 为例：
+
+~~~powershell
 git clone https://github.com/Qiu1717/Aegis-demo.git
 cd Aegis-demo
-
-# 2. 建议用虚拟环境（Python 3.10）
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS / Linux
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 
-# 3. 安装依赖
-pip install -r requirements.txt
+# Web 版，默认访问 http://127.0.0.1:5000
+python main.py
 
-# 4. 配置（可选，也能用首启向导在界面里配）
-copy .env.example .env        # Windows
-# cp .env.example .env        # macOS / Linux
+# 或桌面版，需要系统支持的 pywebview 后端
+python desktop/app.py
+~~~
 
-# 5. 运行
-python main.py               # 浏览器端，访问 http://127.0.0.1:5000
-python desktop/app.py        # 桌面端（pywebview 窗口）
-```
+模型可以直接在界面中配置。需要环境变量配置时，复制 .env.example 为 .env 后修改；不要提交真实密钥。
 
-### 打包成安装包
+## 1.8.1 相比 1.8.0 改了什么
 
-```bash
-pip install -r requirements.txt -r desktop/requirements-desktop.txt
-desktop\build.bat            # Windows：建 venv → 密钥扫描 → PyInstaller 打包
-```
-
-产物：`dist\Aegis\Aegis.exe`（免安装目录）与 `desktop\Output\Aegis-Setup-<版本>.exe`（安装包，需 Inno Setup 6）。
-
----
-
-## 技术栈
-
-| 层 | 技术 |
+| 方面 | 本版变化 |
 |---|---|
-| 前端 | 原生 HTML + JavaScript + CSS（无构建链、无框架） |
-| 后端 | Flask 3.0（Python 3.10） |
-| 界面壳 | pywebview 5.x（Windows WebView2） |
-| 数据库 | SQLite（默认，落用户数据目录）/ MySQL 8.0（配置 `.env` 后启用） |
-| 大模型 | 任意 OpenAI 兼容端点：智谱 GLM / 魔搭 ModelScope / 硅基流动 / 通义 / Ollama / 自定义中转 |
-| 密钥 | keyring（系统凭据管理器） |
-| 打包 | PyInstaller 6.x + Inno Setup 6 |
-| 依赖总数 | **6 个运行时依赖**（刻意保持精简，无 LangChain / torch / numpy 等重物） |
+| 模型设置 | 移除故障切换链；修复模型列表拉取、地址规范化和已保存密钥复用；温度、超时、输出上限与上下文预算进入实际请求 |
+| 技能与资料 | 新增本地/GitHub 技能导入与包内参考文档读取；新增文本/代码附件 |
+| 编码流程 | 新增只读计划模式、仓库规则加载和任务阶段反馈 |
+| 多轮稳定性 | 隔离每轮请求，避免停止后旧回调误停新任务；修复历史乱序与附件串会话 |
+| 工具与上下文 | 修复多工具调用配对、命令失败判定；裁剪时保留工具组和合法 JSON |
+| 界面 | 中性色布局与可保存外观；工作区移至输入框旁；移除联网开关和侧栏模型名称 |
+| 实时反馈 | 任务开始更新默认标题，保留手动命名；侧栏可见时每 5 秒同步，切回窗口立即刷新 |
 
----
+这些改动主要完善执行机制与稳定性，尚未用真实收费模型对任务成功率或响应速度做量化对比。
+
+## 使用限制
+
+- **上下文窗口**：设置值参与实际请求预算，但不能突破服务商与模型自身上限；token 当前采用估算。
+- **文件附件**：仅支持 UTF-8 文本/代码，单个最多 2 MiB，每轮最多 8 个、合计 8 MiB；暂不支持 PDF/Word 解析或图片识别。
+- **外部技能**：GitHub 仅支持公开链接。导入默认禁用，启用前应检查内容；导入时不会自动执行脚本。
+- **只读计划模式**：可读取和检索，服务端拒绝写文件、编辑与命令执行。仅保留对话模式禁用工具。
+- **停止任务**：会通知后端取消并断开前端读取；上游模型请求的退出时机仍受网络超时与取消检查影响。
+- **本地执行**：文件工具有工作区路径校验，但 Aegis 不是操作系统级隔离容器。完全访问模式下应在可信项目内执行任务。
+
+## 数据与密钥
+
+安装版默认将数据保存在 %APPDATA%\Aegis，不写入安装目录：
+
+| 内容 | 位置 |
+|---|---|
+| 会话数据库 | %APPDATA%\Aegis\aegis.db |
+| 用户配置 | %APPDATA%\Aegis\config.user.json |
+| 技能与附件 | 用户数据目录内的技能、附件子目录 |
+| 日志 | %APPDATA%\Aegis\logs\ |
+| 密钥 | 优先使用系统凭据管理器；不可用时使用本地后备存储，界面显示当前保护方式 |
+
+卸载保留用户数据。模型调用会将必要的对话、附件、技能指令或代码内容发送给配置的服务商，请按项目要求选择资料和服务商。
+
+本地服务仅监听 127.0.0.1，API 使用本次运行的随机 Token 校验。.env、数据库、日志、构建产物和密钥文件由 .gitignore 排除。配置与发布分离说明见[此文档](docs/开发与发布配置分离.md)。
+
+## 开发与验证
+
+后端使用 Flask，桌面壳使用 pywebview，前端使用原生 HTML、JavaScript 和 CSS；默认 SQLite，也可配置 MySQL。模型使用 OpenAI 兼容接口，支持预设服务商、自定义端点及兼容配置的本地模型。
+
+~~~powershell
+python -m pip install pytest
+python -m pytest -q
+
+# 全部前端回归测试；Node 只用于开发测试，安装版不需要
+$frontendTests = @(Get-ChildItem .\tests -Filter 'test_*.js' | ForEach-Object { $_.FullName })
+node --test @frontendTests
+
+# 发布前的敏感文件与密钥检查
+python prepublish_check.py
+~~~
+
+本版验证：后端 **379 passed、3 skipped**；全部 **10 个 JavaScript 测试文件通过**。打包程序在隔离数据和独立端口下完成启动、关闭及关键接口检查，未使用用户真实密钥进行收费模型评测。
+
+## 构建安装程序
+
+Windows 构建机需要 Python 和 Inno Setup 6：
+
+~~~powershell
+# 创建独立构建环境、安装依赖、检查并生成桌面程序
+.\desktop\build.bat
+
+# 再编译安装程序，按本机安装位置调整编译器路径
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\desktop\installer.iss
+~~~
+
+桌面目录产物为 dist/Aegis/，安装包为 desktop/Output/Aegis-Setup-1.8.1.exe。构建脚本完成桌面程序打包，安装程序需要第二步编译。详见[打包与分发](desktop/README-打包与分发.md)。
+
+发布时将安装包和 SHA-256 校验文件上传为 GitHub Release 附件，不要强制提交 .env、用户数据、虚拟环境或构建产物。
 
 ## 项目结构
 
-```
+~~~text
 Aegis-demo/
-├── main.py                  # Web 端入口（Flask 应用工厂）
-├── requirements.txt         # 运行时依赖（6 个）
-├── pyproject.toml           # 项目元数据与工具配置
-├── CHANGELOG.md             # 更新日志
-│
-├── apps/                    # 后端业务模块
-│   ├── agent/               # 编码 Agent 内核：工具、沙箱、审批、Runner
-│   ├── aichat/              # 会话与消息
-│   ├── settings/            # 服务商配置、密钥、连接测试
-│   ├── llm/                 # 多服务商客户端与降级链
-│   ├── skills/              # 技能注册中心
-│   ├── guard/               # 回答限制规则
-│   ├── websearch/           # 联网检索
-│   ├── security/            # 密钥库、脱敏
-│   └── paths.py             # 路径与用户数据目录
-│
-├── desktop/                 # 桌面壳与打包
-│   ├── app.py               # pywebview 窗口入口
-│   ├── server.py            # 本地服务启动、单实例锁
-│   ├── build.bat            # 一键构建
-│   ├── build.spec           # PyInstaller 配置
-│   ├── installer.iss        # Inno Setup 安装包脚本
-│   └── README-打包与分发.md
-│
-├── static/                  # 前端资源（css / js）
-├── templates/               # Jinja2 模板
-├── config/config.json       # 默认配置
-├── resource/sql/            # MySQL 建表脚本
-├── tests/                   # 测试（pytest + Node 状态机测试）
-└── docs/                    # 架构设计、PRD、使用手册
-```
-
----
-
-## 数据存放位置
-
-程序**不写安装目录**，用户数据统一在：
-
-| 内容 | 路径 |
-|---|---|
-| 数据库 | `%APPDATA%\Aegis\aegis.db` |
-| 用户配置 | `%APPDATA%\Aegis\config.user.json` |
-| 密钥 | 系统凭据管理器（keyring） |
-| 日志 | `%APPDATA%\Aegis\logs\` |
-
-卸载程序不会删除这些数据。
-
----
-
-## 测试
-
-```bash
-pip install pytest
-
-# 后端测试（205 个用例）
-pytest tests/ -q
-
-# 前端状态机测试（190 个断言，需 Node）
-node tests/test_ui_defects.js
-node tests/test_session_create_sync.js
-node tests/test_session_delete_sync.js
-node tests/test_settings_close.js
-node tests/test_welcome_view.js
-node tests/test_realtime_feedback.js
-```
-
----
-
-## 安全说明
-
-- `.env` 已被 `.gitignore` 排除，**切勿提交含真实密钥的配置**
-- API Key 存于系统凭据管理器，配置文件只留 `key_ref` 引用
-- 日志输出经脱敏过滤，密钥不会落盘
-- 本地服务仅监听 `127.0.0.1`，并有随机 Token 校验（防止局域网内其他程序调用）
-- Agent 的文件与命令操作受工作区沙箱约束，越界路径一律拒绝
-
----
-
-## 更新日志
-
-见 [CHANGELOG.md](CHANGELOG.md)。
-
----
+├── main.py                 # Web 入口
+├── apps/
+│   ├── agent/              # Agent、工具、审批、附件与工作区校验
+│   ├── aichat/             # 会话与消息
+│   ├── llm/                # 模型客户端与参数处理
+│   ├── settings/           # 模型、密钥与设置
+│   ├── skills/             # 技能与外部技能包
+│   ├── websearch/          # 联网搜索
+│   ├── guard/             # 内容规则
+│   └── security/          # 凭据与日志脱敏
+├── desktop/                # 桌面入口与打包配置
+├── static/                 # 前端脚本与样式
+├── templates/              # 页面模板
+├── config/                 # 默认配置
+├── tests/                  # 后端与前端回归
+└── docs/                   # 设计、使用与发布说明
+~~~
 
 ## 开源协议
 
-MIT License —— 见 [LICENSE](LICENSE)。
+[MIT License](LICENSE)。

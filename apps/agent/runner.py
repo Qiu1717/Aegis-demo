@@ -85,6 +85,17 @@ DEFAULT_APPROVAL_TIMEOUT = 120
 #: 历史消息参与 Agent 上下文的最大条数（防止撑爆窗口）
 MAX_HISTORY_MESSAGES = 20
 
+# ── 任务内上下文预算（裁剪）────────────────────────────────
+#: 发给模型的 messages 总 token 预算（与 client.estimate_tokens 同一口径）。
+#: 旧实现只在入口限制 DB 历史条数，任务内的工具结果逐条全量回填：
+#: 25 步 × 每步 ≤6000 字符 + system + 历史，最坏可达数万 token，
+#: 超出厂商窗口即被 400 拒绝，整个任务报废。此预算在每次调用前裁剪。
+DEFAULT_CONTEXT_TOKEN_BUDGET = 30000
+#: 裁剪时保护的「最近消息数」（约最近 4 组工具调用保持完整，支撑当前推理）
+PROTECT_RECENT = 8
+#: 早期 user/assistant 文本消息截断保留的字符数
+HISTORY_KEEP_CHARS = 400
+
 
 def new_task_id() -> str:
     """生成本次任务的短 id（用于备份目录与变更清单）"""
@@ -123,12 +134,17 @@ def cancel_task(task_id: str) -> bool:
     """
     取消一个任务：置 cancel_event（会杀掉在跑的子进程）+ 把挂起的审批按拒绝处理。
 
+    同时置位 pause_event：若任务正卡在「暂停」闸（pause_event.wait() 无限等待），
+    置位后线程被唤醒，循环开头检测到 cancel_event 即退出 —— 否则「暂停中点停止」
+    会让 SSE 线程永久挂死（线程泄漏，任务永远不结束）。
+
     :return: 是否命中一个已知任务
     """
     runner = get_runner(task_id)
     if not runner:
         return False
     runner.cancel_event.set()
+    runner.pause_event.set()
     try:
         approval_manager.cancel_task(task_id)
     except Exception:
@@ -198,14 +214,16 @@ class AgentRunner:
         self.history = list(history or [])
         self.cancel_event = cancel_event or threading.Event()
 
-        # ── 权限模式（三级；见 apps/settings 的 PERMISSION_MODES）──
+        # ── 权限模式（四种；见 apps/settings 的 PERMISSION_MODES）──
         #   full    完全访问：文件读写类操作不再逐次审批（危险命令仍需确认）
         #   approve 需用户批准：读自动放行，写/命令逐次确认（默认）
+        #   plan    只读计划：允许理解项目，但不产生写入或命令副作用
         #   chat    仅保留对话：完全禁用一切工具，只回答与讨论
         mode = str(permission_mode or "approve").strip().lower()
-        if mode not in ("full", "approve", "chat"):
+        if mode not in ("full", "approve", "plan", "chat"):
             mode = "approve"
         self.permission_mode = mode
+        self.plan_mode = mode == "plan"
         #: 是否允许使用任何工具（chat 模式硬禁用）
         self.tools_enabled = mode != "chat"
         # 完全访问等价于「自动批准写入」，危险命令始终需要确认（安全底线不变）
@@ -237,6 +255,11 @@ class AgentRunner:
             cfg.get("search_max_results"), DEFAULT_SEARCH_RESULTS, 1, 500)
         self.approval_timeout = self._positive_int(
             cfg.get("approval_wait_timeout"), DEFAULT_APPROVAL_TIMEOUT, 10, 3600)
+        self.context_token_budget = self._positive_int(
+            cfg.get("context_token_budget"), DEFAULT_CONTEXT_TOKEN_BUDGET,
+            4000, 200000)
+        self._default_context_budget = self.context_token_budget
+        self._explicit_context = False
 
         self.changeset = ChangeSet(task_id=self.task_id, workspace=self.ws_root)
         # 登记变更集，供任务结束后 /changes /undo 仍可按 task_id 查到
@@ -263,6 +286,9 @@ class AgentRunner:
         self.final_text = ""
         self._arg_retries = 0
         self._parse_retries = 0
+        self._phase = ""
+        #: 本次任务的指令原文（裁剪上下文时永不删除该消息）
+        self._task_instruction = ""
 
         # 登记到全局注册表，便于 /cancel、/changes、/undo 按 task_id 定位
         register_runner(self)
@@ -285,6 +311,15 @@ class AgentRunner:
         self._outbox = []
         return events
 
+    def _phase_events(self, phase: str, step: int = 0) -> List[dict]:
+        if phase == self._phase:
+            return []
+        self._phase = phase
+        titles = {"planning": "理解任务与制定方案", "executing": "读取与处理项目",
+                  "verifying": "运行检查（以命令结果为准）", "reporting": "整理结果与未完成事项"}
+        return [{"type": "phase", "phase": phase, "task_id": self.task_id,
+                 "step": step, "title": titles[phase]}]
+
     def tool_schemas(self) -> Optional[List[dict]]:
         """
         本次调用实际发给模型的工具表。
@@ -296,7 +331,13 @@ class AgentRunner:
         """
         if not (self.native_tools and self.tools_enabled):
             return None
-        return build_tool_schemas(self.web_enabled, self.local_tools_ok())
+        schemas = build_tool_schemas(self.web_enabled, self.local_tools_ok(),
+                                     skill_enabled=bool(self.skills))
+        if self.plan_mode:
+            readonly = {"read_file", "list_dir", "search_code", WEB_TOOL_NAME, "read_skill_resource"}
+            schemas = [item for item in schemas
+                       if (item.get("function") or {}).get("name") in readonly]
+        return schemas
 
     # ── 意图判断：这个问题真的需要工作区上下文吗 ─────────────────
     #: 明确指向本地代码 / 工作区的信号
@@ -392,7 +433,7 @@ class AgentRunner:
             from apps.llm.client import get_tools_cap
         except Exception:
             return getattr(provider, "supports_tools", "unknown") or "unknown"
-        cap = get_tools_cap(provider.key) or ""
+        cap = get_tools_cap(provider.key, "") or ""
         if cap:
             return cap
         return getattr(provider, "supports_tools", "unknown") or "unknown"
@@ -422,21 +463,29 @@ class AgentRunner:
         return build_system_prompt(
             self.ws, native_tools=self.native_tools, base_prompt=self.system_prompt,
             thinking_level=self.thinking_level, skills=self.skills,
-            web_enabled=self.web_enabled)
+            web_enabled=self.web_enabled, plan_mode=self.plan_mode)
 
     def _init_messages(self) -> List[dict]:
+        from apps.llm import get_client
+
+        client = get_client()
+        self._configure_context_budget(client, client.first_available(allow_offline=False))
         messages: List[dict] = [{"role": "system", "content": self._build_system()}]
         recent = [m for m in self.history
                   if isinstance(m, dict)
                   and m.get("message_role") in ("user", "assistant")
-                  and (m.get("message_content") or "").strip()][-MAX_HISTORY_MESSAGES:]
+                  and (m.get("message_content") or "").strip()]
+        if not self._explicit_context:
+            recent = recent[-MAX_HISTORY_MESSAGES:]
         for item in recent:
             messages.append({"role": item["message_role"],
                              "content": item["message_content"]})
-        messages.append({
+        task_msg = {
             "role": "user",
             "content": build_final_instruction(self.user_task, self.ws_root),
-        })
+        }
+        self._task_instruction = task_msg["content"]
+        messages.append(task_msg)
         return messages
 
     def _rebuild_system(self) -> None:
@@ -447,6 +496,163 @@ class AgentRunner:
             self.messages[0]["content"] = self._build_system()
         else:
             self.messages.insert(0, {"role": "system", "content": self._build_system()})
+
+    # ── 任务内上下文预算裁剪 ──────────────────────────────
+    def _configure_context_budget(self, client, provider, tools=None) -> None:
+        budget = getattr(client, "input_budget", None)
+        if provider is not None and callable(budget):
+            self._explicit_context = bool(getattr(provider, "context_length_explicit", False))
+            self.context_token_budget = budget(provider, self.tool_schemas() if tools is None else tools,
+                                               default=self._default_context_budget)
+
+    @staticmethod
+    def _msg_tokens(m: dict) -> int:
+        """与 client 共享消息及工具调用的协议开销估算。"""
+        from apps.llm.client import LLMClient
+        return LLMClient.message_tokens(m)
+
+    def _trim_messages(self) -> None:
+        """
+        每次调用模型前把 messages 收敛到 token 预算内（原地修改）。
+
+        保留优先级（高 → 低）：
+            1. system 提示词（index 0）
+            2. 最近 PROTECT_RECENT 条消息（支撑当前步推理的完整上下文）
+            3. 本次任务的用户指令（删了它模型就不知道要干什么）
+        收缩顺序（从旧到新）：
+            ① 删除完整的早期工具组：assistant(tool_calls) + 其后紧跟的
+               tool 消息**成组删除** —— 单删一边会违反 OpenAI 协议的
+               tool_call_id 配对要求，被严格厂商 400 拒绝；
+            ② 早期 user/assistant 文本消息截断到 HISTORY_KEEP_CHARS。
+        游离的 tool 消息（不应出现，防御性处理）直接删除。
+        """
+        msgs = self.messages
+        if len(msgs) <= 2:
+            return
+
+        def total_tokens() -> int:
+            return sum(self._msg_tokens(m) for m in msgs)
+
+        total = total_tokens()
+        if total <= self.context_token_budget:
+            return
+
+        # 用对象身份标记保护区，而不是用会随删除而变化的下标；否则删除
+        # 早期消息后，原本的「最近消息」会左移，最终也被误删。
+        protected = {id(m) for m in msgs[-PROTECT_RECENT:]}
+        index = 1
+        while index < len(msgs):
+            if msgs[index].get("role") == "assistant" and msgs[index].get("tool_calls"):
+                end = index + 1
+                while end < len(msgs) and msgs[end].get("role") == "tool":
+                    end += 1
+                if any(id(m) in protected for m in msgs[index:end]):
+                    protected.update(id(m) for m in msgs[index:end])
+                index = end
+            else:
+                index += 1
+        protected.update(id(m) for m in msgs
+                         if m.get("content") == self._task_instruction)
+
+        i = 1
+        while total > self.context_token_budget and i < len(msgs):
+            m = msgs[i]
+            if id(m) in protected:
+                i += 1
+                continue
+            role = m.get("role")
+            if role == "assistant" and m.get("tool_calls"):
+                # 整组删除：assistant + 连续 tool 消息
+                j = i + 1
+                while j < len(msgs) and msgs[j].get("role") == "tool":
+                    j += 1
+                total -= sum(self._msg_tokens(msgs[k]) for k in range(i, j))
+                del msgs[i:j]
+                continue  # 删除后 i 已指向下一组，不推进
+            if role == "tool":
+                total -= self._msg_tokens(m)
+                del msgs[i]
+                continue
+            if m.get("content") == self._task_instruction:
+                i += 1
+                continue
+            if role in ("user", "assistant"):
+                c = str(m.get("content") or "")
+                if len(c) > HISTORY_KEEP_CHARS:
+                    total -= self._msg_tokens(m)
+                    m["content"] = c[:HISTORY_KEEP_CHARS] + "…（早期内容已省略）"
+                    total += self._msg_tokens(m)
+                i += 1
+            else:
+                i += 1
+
+        if total <= self.context_token_budget:
+            return
+
+        # 保护区本身也可能超过预算（例如最近一次 read_file 返回超大文件）。
+        # 这时保留 system、任务指令和最近一个完整工具组，并只压缩 tool 内容；
+        # 不再删除配对消息，确保下一次请求仍符合工具协议。
+        system = msgs[0] if msgs and msgs[0].get("role") == "system" else None
+        task = next((m for m in reversed(msgs)
+                     if m.get("content") == self._task_instruction), None)
+        history = next((m for m in reversed(msgs)
+                        if m.get("role") in ("user", "assistant")
+                        and m.get("content") != self._task_instruction
+                        and str(m.get("content") or "").endswith(
+                            "…（早期内容已省略）")), None)
+        group_start = -1
+        for index in range(len(msgs) - 1, 0, -1):
+            if msgs[index].get("role") == "assistant" and msgs[index].get("tool_calls"):
+                group_start = index
+                break
+        compacted = []
+        if system:
+            compacted.append(system)
+        if group_start >= 0:
+            compacted.append(msgs[group_start])
+            index = group_start + 1
+            while index < len(msgs) and msgs[index].get("role") == "tool":
+                compacted.append(msgs[index])
+                index += 1
+        if history is not None:
+            compacted.append(history)
+        if task is not None and task not in compacted:
+            compacted.append(task)
+
+        def compacted_tokens() -> int:
+            return sum(self._msg_tokens(m) for m in compacted)
+
+        while compacted_tokens() > self.context_token_budget:
+            candidates = [m for m in compacted
+                          if m.get("role") in ("tool", "user", "assistant")
+                          and m.get("content") != self._task_instruction
+                          and isinstance(m.get("content"), str)
+                          and len(m["content"]) > 96]
+            if not candidates:
+                break
+            target = max(candidates, key=lambda m: len(m["content"]))
+            previous_tokens = self._msg_tokens(target)
+            excess_chars = max(64, (compacted_tokens() - self.context_token_budget) * 2)
+            keep = max(64, len(target["content"]) - excess_chars)
+            marker = ("…（上下文已压缩）" if target.get("role") == "tool"
+                      else "…（早期内容已省略）")
+            if target.get("role") == "tool":
+                excerpt = target["content"]
+                try:
+                    previous = json.loads(excerpt)
+                    if isinstance(previous, dict) and previous.get("truncated"):
+                        excerpt = previous.get("excerpt", excerpt)
+                except (ValueError, TypeError):
+                    pass
+                target["content"] = json.dumps({"excerpt": excerpt[:max(16, keep - 80)],
+                    "truncated": True, "notice": marker}, ensure_ascii=False)
+            else:
+                target["content"] = target["content"][:keep] + marker
+            if self._msg_tokens(target) >= previous_tokens:
+                break
+
+        if compacted:
+            self.messages = compacted
 
     # ── LLM 调用 ──────────────────────────────────────────
     def _llm_call(self) -> Generator[dict, None, Reply]:
@@ -459,6 +665,12 @@ class AgentRunner:
             return Reply(error=self._no_model_info(client))
 
         tools = self.tool_schemas()
+        self._configure_context_budget(client, provider, tools)
+        # 上下文预算：超预算时收缩早期工具组与历史文本（见 _trim_messages）
+        self._trim_messages()
+        if sum(self._msg_tokens(m) for m in self.messages) > self.context_token_budget:
+            return Reply(error={"code": "CONTEXT_LIMIT", "reason": "任务指令或工具参数超过上下文预算",
+                                "action": "缩短输入或降低最大 Token；上下文设置不能扩展服务商能力", "need_settings": True})
         text_parts: List[str] = []
         buffer: Dict[int, dict] = {}
         error_info: Optional[dict] = None
@@ -585,6 +797,20 @@ class AgentRunner:
 
     def _execute(self, call: ToolCall, step: int) -> Generator[dict, None, ToolResult]:
         """执行一个工具调用（生成器：会产出审批/终端/结果等事件并返回 ToolResult）"""
+        if self.plan_mode and call.name in ("write_file", "edit_file", "run_command"):
+            event = {"type": "tool_call", "step": step}
+            event.update(call.to_event())
+            event["risk"] = RISK_WRITE
+            yield event
+            result = ToolResult(
+                call_id=call.id, tool=call.name, ok=False,
+                error={"code": "PLAN_MODE_READONLY",
+                       "message": "当前为「计划模式」，只允许读取、检索和联网查询，不会修改文件或执行命令"},
+                risk=RISK_WRITE, summary=call.to_event().get("summary", ""),
+            )
+            yield from self._emit_result(step, result)
+            return result
+
         # 「仅保留对话」权限：硬禁用一切工具（即使模型强行产出调用也不执行）
         if not self.tools_enabled:
             event = {"type": "tool_call", "step": step}
@@ -703,14 +929,61 @@ class AgentRunner:
             logger.exception("落库变更记录失败 change_id=%s", change_id)
 
     # ── 强制总结 ──────────────────────────────────────────
+    @staticmethod
+    def _summary_safe_messages(messages: List[dict], keep_recent: int = 24) -> List[dict]:
+        """
+        构造「强制总结」可安全发送的消息序列。
+
+        原实现把含 tool_calls / tool 消息的完整 messages 直接随 tools=None
+        发出去 —— 部分厂商对「无 tools 请求却携带 tool 消息」返回 400，
+        恰好让最需要收尾的长任务雪上加霜。这里把对话流压成纯文本：
+            · tool 消息 → user 文本「[工具结果] …」（截断）；
+            · assistant.tool_calls → assistant 文本「[调用工具: …]」。
+        """
+        safe: List[dict] = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                safe.append({"role": "system", "content": m.get("content") or ""})
+                continue
+            if role == "tool":
+                safe.append({"role": "user",
+                             "content": "[工具结果] %s" % (str(m.get("content") or "")[:500])})
+                continue
+            tc = m.get("tool_calls")
+            if tc:
+                names = []
+                for c in tc:
+                    fn = (c.get("function") or {}) if isinstance(c, dict) else {}
+                    if fn.get("name"):
+                        names.append(str(fn["name"]))
+                safe.append({"role": "assistant",
+                             "content": "[调用工具: %s]" % ", ".join(names) if names else "[调用工具]"})
+                continue
+            if role in ("user", "assistant"):
+                safe.append({"role": role, "content": str(m.get("content") or "")})
+        # 只保留 system + 最近 keep_recent 条，避免总结请求本身超窗
+        if len(safe) > keep_recent + 1 and safe and safe[0].get("role") == "system":
+            safe = [safe[0]] + safe[-keep_recent:]
+        return safe
+
     def _force_summary(self) -> str:
         """达到最大步数后不带 tools 再要一次总结"""
         from apps.llm import get_client
 
-        messages = list(self.messages)
+        messages = self._summary_safe_messages(
+            self.messages, keep_recent=len(self.messages) if self._explicit_context else 24)
         messages.append({"role": "user", "content": FORCE_SUMMARY_INSTRUCTION})
         try:
             client = get_client()
+            original = self.messages
+            try:
+                self.messages = messages
+                self._configure_context_budget(client, client.first_available(allow_offline=False), tools=[])
+                self._trim_messages()
+                messages = self.messages
+            finally:
+                self.messages = original
             outcome = client.complete_tools(messages, tools=None)
         except Exception:
             logger.exception("Agent 强制总结失败")
@@ -773,6 +1046,7 @@ class AgentRunner:
 
         self.native_tools = self.tools_enabled and (self._tools_cap(provider) != "none")
         self.messages = self._init_messages()
+        yield from self._phase_events("planning")
 
         for step in range(1, self.max_steps + 1):
             if self.cancel_event.is_set():
@@ -780,11 +1054,18 @@ class AgentRunner:
                 break
 
             steps = step
-            # 暂停闸：用户点了「暂停」后，循环在此阻塞直到「继续」置位
+            # 暂停闸：用户点了「暂停」后，循环在此阻塞直到「继续」置位。
+            # 若阻塞期间任务被取消（cancel_task 会同时置位本闸以唤醒线程），
+            # 则不发 resumed —— 直接落到下一步循环开头的 cancel 检查退出。
             if not self.pause_event.is_set():
                 yield {"type": "paused", "task_id": self.task_id}
                 self.pause_event.wait()
-                yield {"type": "resumed", "task_id": self.task_id}
+                if not self.cancel_event.is_set():
+                    yield {"type": "resumed", "task_id": self.task_id}
+
+            if self.cancel_event.is_set():
+                stopped_by = "user"
+                break
 
             yield {"type": "agent_step", "step": step, "status": "thinking",
                    "title": "思考中…"}
@@ -804,19 +1085,30 @@ class AgentRunner:
                 continue
 
             if not reply.tool_calls:
+                yield from self._phase_events("reporting", step)
                 self.final_text = reply.text
                 for ev in self._emit_skill_marks(reply.text):
                     yield ev
                 stopped_by = "completed"
                 break
 
+            executed_calls: List[ToolCall] = []
+            executed_results: List[ToolResult] = []
             for call in reply.tool_calls:
                 if self.cancel_event.is_set():
                     stopped_by = "user"
                     break
 
                 tool_calls_count += 1
+                phase = "executing"
+                if call.name == "run_command" and re.search(
+                        r"\b(pytest|unittest|compileall|ruff|mypy|eslint|tsc)\b|\b(npm|pnpm|yarn)\s+(test|run\s+(test|lint|build))\b|\b(cargo|go)\s+test\b",
+                        str(call.args.get("command") or ""), re.I):
+                    phase = "verifying"
+                yield from self._phase_events(phase, step)
                 result = yield from self._execute(call, step)
+                executed_calls.append(call)
+                executed_results.append(result)
 
                 if not result.ok:
                     code = (result.error or {}).get("code") or ""
@@ -827,15 +1119,11 @@ class AgentRunner:
                         consecutive_errors += 1
                 else:
                     consecutive_errors = 0
-
-                # 回填 messages
-                if self.native_tools:
-                    self.messages.append(call.as_assistant_message())
-                    self.messages.append(result.as_tool_message())
-                else:
-                    self.messages.append({"role": "assistant",
-                                          "content": reply.raw_text or reply.text})
-                    self.messages.append(result.as_user_message())
+                    # 工具成功 → 解析/参数重试预算重置为「本步可用」。
+                    # 旧实现是整个任务累计：早期一次成功纠错会消耗掉后期
+                    # 的重试额度，长任务末尾一次偶发格式错误就直接终止。
+                    self._arg_retries = 0
+                    self._parse_retries = 0
 
                 if denials >= MAX_DENIALS:
                     stopped_by = "denied"
@@ -844,11 +1132,32 @@ class AgentRunner:
                     stopped_by = "tool_errors"
                     break
 
+            # 原生 tools 协议要求：一个 assistant tool_calls 消息必须紧跟
+            # 对应的 tool 消息组。多工具响应不能按调用逐条重复 assistant 消息，
+            # 否则下一轮请求会出现 tool_call_id 配对错误。
+            if self.native_tools and executed_calls:
+                tool_calls = []
+                for call in executed_calls:
+                    tool_calls.extend(call.as_assistant_message()["tool_calls"])
+                self.messages.append({
+                    "role": "assistant",
+                    "content": reply.raw_text or reply.text,
+                    "tool_calls": tool_calls,
+                })
+                for result in executed_results:
+                    self.messages.append(result.as_tool_message())
+            elif not self.native_tools:
+                for result in executed_results:
+                    self.messages.append({"role": "assistant",
+                                          "content": reply.raw_text or reply.text})
+                    self.messages.append(result.as_user_message())
+
             if stopped_by in ("user", "denied", "tool_errors"):
                 break
         else:
             # for 正常走完 = 触达 max_steps
             stopped_by = "max_steps"
+            yield from self._phase_events("reporting", steps)
             summary = self._force_summary()
             if summary:
                 yield {"type": "chunk", "content": summary}

@@ -21,7 +21,7 @@
             <section class="aegis-card aegis-card--flat">
                 <div class="aegis-card__head">
                     <span class="aegis-card__title">模型与密钥</span>
-                    <span class="aegis-card__desc">选择服务商、填写 Base URL 与 API Key</span>
+                    <span class="aegis-card__desc">保存后仅使用选中的服务商；失败时不会自动换模型</span>
                 </div>
                 <div class="aegis-card__body">
 
@@ -54,7 +54,7 @@
                     <button class="btn btn-secondary aegis-btn-sm" id="stFetchModelsBtn2"
                             type="button" title="从该服务商拉取可用模型清单">拉取模型</button>
                 </div>
-                <p class="aegis-field__hint" id="stContextHint">填 0 表示按模型名自动推断（常见模型已内置窗口表）；超过上限的历史会被自动裁剪。</p>
+                <p class="aegis-field__hint" id="stContextHint">0 使用安全默认；显式窗口扣除输出、系统与工具开销后用于历史。用户设置不能扩展服务商的实际能力。</p>
             </div>
 
             <div class="aegis-field">
@@ -135,7 +135,7 @@
                         <button class="btn btn-secondary aegis-btn-sm" id="stCustDelBtn" type="button" hidden>删除该厂商</button>
                     </div>
                 </div>
-                <p class="aegis-field__hint">添加后自动加入故障切换链末位（本地模式之前），可在上方服务商下拉框中继续编辑或测试。</p>
+                <p class="aegis-field__hint">添加后选中该服务商，可在上方下拉框继续编辑或测试。切换模型需自行选择并保存。</p>
             </details>
 
             <!-- ── 回答限制规则（AI 回答限制）────────────── -->
@@ -221,13 +221,6 @@
 
                 </div>
             </details>
-
-            <!-- ── 故障切换链 ───────────────────────────── -->
-            <div class="aegis-section">
-                <div class="aegis-section__head">故障切换链</div>
-                <ul class="aegis-chain" id="stChain"></ul>
-                <p class="aegis-field__hint">依次尝试，前面的不可用时自动切换下一个。</p>
-            </div>
 
             <!-- 工作区不在设置里配置：统一由对话框左上角的按钮管理 -->
 

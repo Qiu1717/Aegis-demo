@@ -595,7 +595,7 @@
     }
 
     // ── 权限设置（三级：完全访问 / 需用户批准 / 仅保留对话）──
-    var PERM_LABELS = { full: "完全访问", approve: "需用户批准", chat: "仅保留对话" };
+    var PERM_LABELS = { full: "完全访问", approve: "需用户批准", plan: "计划模式（只读）", chat: "仅保留对话" };
 
     function loadPermission() {
         return getJSON("/api/settings/permission").then(function (info) {
@@ -1422,6 +1422,11 @@
                 elModelSelect.textContent = "模型：" + evt.model;
                 elModelSelect.classList.remove("is-unset");
             }
+            return;
+        }
+
+        if (type === "phase") {
+            appendNotice(evt.title || "处理中");
             return;
         }
 

@@ -3,9 +3,9 @@
 apps/llm/client.py — 大模型调用客户端
 
 职责：
-    1. 按 provider_chain 顺序依次尝试各个服务商
-    2. 某个服务商失败（欠费 / Key 无效 / 限流 / 断网 / 模型不存在）自动切下一个
-    3. 全部失败时降级到本地模式应答引擎，保证系统永不报错
+    1. 只调用用户选中的服务商，旧 provider_chain 仅用于迁移选择
+    2. 调用失败时返回分级错误，由用户决定是否更换服务商
+    3. 仅显式选择本地模式时使用本地应答引擎
     4. 统一 OpenAI 兼容的流式（SSE）与非流式调用
 
 对外产出的是事件字典，便于上层直接转成 SSE：
@@ -20,13 +20,21 @@ from typing import Dict, Generator, List, Optional, Tuple
 import requests
 
 from . import offline
-from .providers import PRESETS, Provider, build_provider
+from .providers import PRESETS, Provider, build_provider, selected_provider_key
 from apps import logger
-from apps.security.errors import classify
+from apps.security.errors import classify as _classify
+
+
+def classify(status_or_exc=None, detail="") -> dict:
+    info = dict(_classify(status_or_exc, detail))
+    info.pop("detail", None)
+    if info.get("code") in ("RATE_LIMIT", "SERVER_ERROR"):
+        info["action"] = "稍后重试；如需更换服务商，请在设置中手动选择"
+    return info
 
 
 class ProviderFailed(Exception):
-    """某个服务商调用失败，应当切换下一个"""
+    """选中的服务商调用失败。"""
 
     def __init__(self, message: str, info: Optional[dict] = None):
         super().__init__(message)
@@ -116,12 +124,12 @@ def _compress_for_budget(text: str, budget_tokens: int) -> str:
                     return out
 
     # 兜底：按行截断
-    limit_chars = max(64, budget_tokens * 2)
+    limit_chars = max(0, budget_tokens * 2)
     if len(text) <= limit_chars:
         return text
     out = text[:limit_chars].rstrip()
     out += "\n…（内容因上下文长度限制被截断）"
-    return out
+    return out[:limit_chars]
 
 
 
@@ -264,12 +272,13 @@ class LLMClient:
         self.system_prompt = self.cfg.get("system_prompt", "")
 
         providers_cfg = self.cfg.get("providers", {}) or {}
+        self.active_provider = selected_provider_key(self.cfg)
         chain = self.cfg.get("provider_chain")
         if not chain:
             chain = list(providers_cfg.keys()) or ["offline"]
 
         self.providers: Dict[str, Provider] = {}
-        for key in chain:
+        for key in dict.fromkeys(list(chain) + list(providers_cfg) + [self.active_provider]):
             preset = PRESETS.get(key)
             if key != "offline" and preset is None and key not in providers_cfg:
                 continue
@@ -286,41 +295,28 @@ class LLMClient:
         self.last_errors: List[str] = []
         #: 用户在设置中明确选中的 active_provider（config.llm.active_provider）；
         #: 模型状态展示优先跟随它，而不是「最近用过」或「链上第一个可用」。
-        self.active_provider: Optional[str] = self.cfg.get("active_provider")
         #: 最近一次失败的结构化错误（供上层「前往设置」引导使用）
         self.last_error_info: Optional[dict] = None
 
     # ── 上下文组装 ────────────────────────────────────────
     def _guess_context_provider(self) -> Optional[Provider]:
-        """
-        在组装上下文前推断「本次大概会用哪个厂商」，取其上下文窗口。
+        return self.providers.get(self.active_provider)
 
-        真实调用时 _pick_provider() 还会按可用性/切换链重新选，
-        这里只是**预算估算**用途：宁可按窗口较小的厂商留预算，
-        也不要按大窗口留了一堆历史结果被上游拒绝。
-        顺序：用户显式选的 active_provider → 链上第一个可用项。
-        """
-        # 1) 用户在设置里明确选中的
-        if self.active_provider:
-            p = self.providers.get(self.active_provider)
-            if p is not None:
-                return p
-        # 2) 链上第一个「静态可用」的厂商
-        for key in self.chain:
-            p = self.providers.get(key)
-            if p is None:
-                continue
-            try:
-                ok, _ = p.availability()
-            except Exception:
-                ok = False
-            if ok:
-                return p
-        # 3) 兜底：链上任意一个
-        for key in self.chain:
-            if self.providers.get(key) is not None:
-                return self.providers[key]
-        return None
+    def input_budget(self, provider: Provider, tools: Optional[List[dict]] = None,
+                     reserve_tokens: int = 0, default: int = 6000) -> int:
+        """消息总预算；包含 system，扣输出、工具描述与协议余量。"""
+        reserve = max(int(reserve_tokens or self.max_tokens), 0)
+        tool_tokens = estimate_tokens(json.dumps(tools, ensure_ascii=False)) if tools else 0
+        window = int(getattr(provider, "context_length", 0) or 32768)
+        room = max(0, window - reserve - tool_tokens - 256)
+        return room if getattr(provider, "context_length_explicit", False) else min(default, room)
+
+    @staticmethod
+    def message_tokens(message: dict) -> int:
+        text = str(message.get("content") or "")
+        if message.get("tool_calls"):
+            text += json.dumps(message["tool_calls"], ensure_ascii=False)
+        return estimate_tokens(text) + 4
 
     def build_messages(self, history: List[dict],                       system_extra: str = None,
                        provider: Optional[Provider] = None,
@@ -331,8 +327,7 @@ class LLMClient:
         上下文窗口策略（token 预算感知）：
             · system 提示词（含可注入的长期记忆 system_extra）始终保留；
             · 会话历史从「最近一条」往回累加，受三条约束：
-              - max_context_messages：消息条数硬上限（防止极短消息刷屏）；
-              - max_context_tokens  ：历史部分的 token 预算（防止长消息撑爆窗口）；
+              - 未显式配置窗口时保留 max_context_messages / max_context_tokens 安全默认；
               - provider.context_length：当前厂商的上下文窗口，
                 预算会按「窗口 - 本轮输出预留 - 系统提示词」动态收窄，
                 避免请求发出去被上游以「上下文超限」拒绝；
@@ -353,34 +348,28 @@ class LLMClient:
         if system_extra:
             sys_text = (sys_text + "\n\n" + system_extra) if sys_text else system_extra
 
-        limit = int(self.cfg.get("max_context_messages", 20))
-        budget = int(self.cfg.get("max_context_tokens", 6000))
-
-        # ── 依据当前厂商窗口收窄预算 ──
-        window = int(getattr(provider, "context_length", 0) or 0) if provider else 0
-        if window > 0:
-            sys_tokens = estimate_tokens(sys_text) if sys_text else 0
-            # 给输出留出余量（至少 512，避免 max_tokens 配得过大时把历史挤没）
-            reserve = max(int(reserve_tokens or 0), 512)
-            room = window - sys_tokens - reserve
-            # 窗口再大也不超过用户显式设的 max_context_tokens，
-            # 避免「填了 200K 窗口就真塞 200K」把费用和延迟拉爆。
-            budget = max(256, min(budget, room))
+        explicit = bool(getattr(provider, "context_length_explicit", False))
+        limit = len(history) if explicit else int(self.cfg.get("max_context_messages", 20))
+        budget = self.input_budget(provider, reserve_tokens=reserve_tokens,
+                                   default=int(self.cfg.get("max_context_tokens", 6000)))
 
         # ── system 提示词本身超预算时先压缩 ──
-        if sys_text and estimate_tokens(sys_text) > budget:
-            sys_text = _compress_for_budget(sys_text, budget)
+        latest = next((m for m in reversed(history) if m.get("message_role") in ("user", "assistant")), None)
+        latest_tokens = estimate_tokens(latest.get("message_content") or "") + 4 if latest else 0
+        system_room = max(0, budget - latest_tokens - 4)
+        if sys_text and estimate_tokens(sys_text) > system_room:
+            sys_text = _compress_for_budget(sys_text, system_room)
         if sys_text:
             messages.append({"role": "system", "content": sys_text})
 
         recent = []
-        used = 0
+        used = self.message_tokens(messages[0]) if messages else 0
         for msg in reversed(history):
             role = msg.get("message_role")
             if role not in ("user", "assistant"):
                 continue
             content = msg.get("message_content") or ""
-            t = estimate_tokens(content)
+            t = estimate_tokens(content) + 4
             # 第一条（最新）无论如何都保留；其后超出预算或条数上限则停止
             if recent and (used + t > budget or len(recent) >= limit):
                 break
@@ -414,6 +403,13 @@ class LLMClient:
             "max_tokens": self.max_tokens,
             "stream": stream,
         }
+        # 用户填写的窗口只是本地预算；服务商仍会执行自身的物理上限。
+        budget = self.input_budget(p, tools, default=4_000_000)
+        if sum(self.message_tokens(m) for m in messages) > budget:
+            raise ProviderFailed("消息超过上下文预算", {
+                "code": "CONTEXT_LIMIT", "reason": "输入与输出预留超过上下文预算",
+                "action": "缩短输入或降低最大 Token；窗口设置不能扩展服务商能力",
+                "need_settings": True, "retryable": False})
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice or "auto"
@@ -441,7 +437,7 @@ class LLMClient:
             detail = (resp.text or "")[:160].replace("\n", " ").strip()
             reason = _http_reason(resp.status_code)
             # 详细原文只进日志，不外传（沿用现有安全约定）
-            logger.info("服务商 %s 返回 HTTP %s：%s", p.key, resp.status_code, detail)
+            logger.info("服务商 %s 返回 HTTP %s", p.key, resp.status_code)
             # 运行时能力探测：带 tools 请求被拒且响应体提到 tools → 标记不支持原生工具
             if tools and resp.status_code in (400, 404) and _body_mentions_tools(detail):
                 logger.info("运行时探测：服务商 %s 不支持原生 tools，切换 JSON 回退", p.key)
@@ -506,7 +502,7 @@ class LLMClient:
         if resp.status_code != 200:
             detail = (resp.text or "")[:160].replace("\n", " ").strip()
             reason = _http_reason(resp.status_code)
-            logger.info("服务商 %s 返回 HTTP %s：%s", p.key, resp.status_code, detail)
+            logger.info("服务商 %s 返回 HTTP %s", p.key, resp.status_code)
             if tools and resp.status_code in (400, 404) and _body_mentions_tools(detail):
                 logger.info("运行时探测：服务商 %s 不支持原生 tools，切换 JSON 回退", p.key)
                 set_tools_cap(p.key, "none")
@@ -634,22 +630,8 @@ class LLMClient:
 
     # ── 对外主入口：Agent 工具调用 ────────────────────────
     def _ordered_keys(self) -> List[str]:
-        """
-        本次实际尝试服务商的顺序：**用户在设置里选中者优先**，其余按 chain。
-
-        与 `_display_info()` 的展示口径保持一致，确保「设置里选的是谁」就是
-        「实际调用的是谁」。此前只按 chain 顺序取，会出现：测试连接测的是
-        DeepSeek（成功），实际对话却用了链首的 zhipu（其 key 来自 .env、
-        可能已失效）→ 报「API Key 失效」，两处行为完全对不上。
-        """
-        ordered: List[str] = []
-        ap = self.active_provider
-        if ap and ap in self.providers:
-            ordered.append(ap)
-        for key in self.chain:
-            if key not in ordered:
-                ordered.append(key)
-        return ordered
+        """运行只使用选中者；不可用时返回错误。"""
+        return [self.active_provider] if self.active_provider in self.providers else []
 
     def _provider_note(self, key: str) -> str:
         """
@@ -671,7 +653,7 @@ class LLMClient:
 
     def first_available(self, allow_offline: bool = True) -> Optional[Provider]:
         """
-        返回本次实际要用的服务商（选中者优先，其余按 chain）。
+        返回选中的服务商；选中者不可用时返回 None。
 
         Agent 模式用 `allow_offline=False`：离线规则引擎不具备工具调用能力，
         没有真实模型时应直接引导用户去设置，而不是假装在干活。
@@ -689,18 +671,14 @@ class LLMClient:
 
     def _tools_order(self, provider_key: Optional[str]) -> List[str]:
         """
-        工具调用的尝试顺序：指定服务商优先，其余按 chain。
+        工具调用只允许选中者，调用方提示不能触发跨服务商切换。
 
         **始终排除本地模式**：规则引擎不会真的调工具，降级只会产出假结果，
         Agent 模式宁可报错引导用户去设置。
         """
-        order: List[str] = []
-        preferred = provider_key or self.active_provider
-        if preferred and preferred in self.providers:
-            order.append(preferred)
-        for key in self._ordered_keys():
-            if key not in order and key in self.providers:
-                order.append(key)
+        if provider_key and provider_key != self.active_provider:
+            return []
+        order = self._ordered_keys()
         return [k for k in order if not self.providers[k].is_offline]
 
     def stream_tools(self, messages: List[dict],
@@ -835,26 +813,11 @@ class LLMClient:
         未配置任何大模型服务时返回 ("未配置模型", "")，
         前端不应展示"离线兜底"一类字样。
         """
-        # 1) 用户在设置里显式选中的 active_provider（与保存的配置保持一致）
+        # 状态与调用使用同一个选择，即便其密钥失效也不展示其他模型。
         ap = self.active_provider
         if ap and ap in self.providers and self.providers[ap].key != "offline":
             p = self.providers[ap]
-            ok, _ = p.availability()
-            if ok:
-                return (f"{p.label} · {p.model}", p.model)
-        # 2) 最近实际使用的厂商
-        if self.last_used and self.last_used in self.providers:
-            p = self.providers[self.last_used]
-            if p.key != "offline":
-                return (f"{p.label} · {p.model}", p.model)
-        # 3) 链上第一个可用厂商
-        for key in self.chain:
-            p = self.providers[key]
-            if p.key == "offline":
-                continue
-            ok, _ = p.availability()
-            if ok:
-                return (f"{p.label} · {p.model}", p.model)
+            return (f"{p.label} · {p.model}", p.model)
         return ("未配置模型", "")
 
     def describe(self) -> dict:
@@ -869,7 +832,7 @@ class LLMClient:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "max_context_messages": self.cfg.get("max_context_messages", 20),
-            "providers": [self.providers[k].describe() for k in self.chain],
+            "providers": [p.describe() for p in self.providers.values()],
         }
 
     def active_label(self) -> str:

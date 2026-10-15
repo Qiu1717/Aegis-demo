@@ -307,7 +307,7 @@ def save_message(session_id, role, content, message_type="text", metadata=None):
 def update_session_title_if_default(session_id, message):
     """如果会话标题为默认值，用首条消息自动生成标题"""
     session = get_session(session_id)
-    if session and session["session_title"] in ("新对话", "新会话"):
+    if session and session["session_title"] in ("新对话", "新会话", "新任务"):
         title = message[:20].replace("\n", " ").strip()
         if not title:
             title = "新对话"
@@ -324,7 +324,13 @@ def _build_llm_messages(history, system_extra=None):
     system 提示词与上下文长度统一由 config.json 控制；
     system_extra 用于注入跨会话长期记忆。
     """
-    return get_client().build_messages(history, system_extra=system_extra)
+    from apps.agent.prompts import THINKING_HINTS
+    from apps.settings.services import get_thinking_level
+
+    # 三档是提示词深度倾向，不保证服务商原生推理参数或实际计算量。
+    hint = THINKING_HINTS.get(get_thinking_level(), "")
+    extra = "\n\n".join(text for text in (system_extra, hint) if text)
+    return get_client().build_messages(history, system_extra=extra)
 
 
 def chat_stream(session_id, user_message, use_web=True):

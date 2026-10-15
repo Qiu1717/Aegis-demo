@@ -17,7 +17,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>
+                    <path d="M4 19L12 4l8 15M7 14h10"/>
                 </svg>
             </span>
             <span class="aw-brand-text">Aegis</span>
@@ -36,7 +36,10 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2l2.4 6.6L21 9.6l-5 4.2 1.6 6.6L12 17l-5.6 3.4L8 13.8 3 9.6l6.6-1z"/>
+                    <rect x="4" y="4" width="6" height="6" rx="1"/>
+                    <rect x="14" y="4" width="6" height="6" rx="1"/>
+                    <rect x="4" y="14" width="6" height="6" rx="1"/>
+                    <rect x="14" y="14" width="6" height="6" rx="1"/>
                 </svg>
                 <span>技能</span>
             </button>
@@ -49,11 +52,12 @@
                 </svg>
                 <span>设置</span>
             </button>
+            <button class="aw-nav-item" id="awBtnAppearance" type="button">外观与侧栏</button>
         </nav>
 
         <div class="aw-side-sep"></div>
         <div class="aw-hist" id="awHist">
-            <div class="aw-side-label">历史记录</div>
+            <div class="aw-side-label">最近任务</div>
             <div class="aw-conv-list" id="awConvList"></div>
             <div class="aw-arch" id="awArch" hidden>
                 <button class="aw-arch-head" id="awArchHead" type="button"
@@ -66,10 +70,6 @@
             </div>
         </div>
 
-        <div class="aw-side-foot">
-            <span class="aw-chip" id="awWsChip" title="">工作区：加载中</span>
-            <span class="aw-chip" id="awModelChip" title="">模型：加载中</span>
-        </div>
     </aside>
 
     <div class="aw-overlay" id="awOverlay"></div>
@@ -81,14 +81,14 @@
         <header class="aw-topbar">
             <div class="aw-topbar-left">
                 <button class="aw-menu-btn" id="awMenuBtn" type="button"
-                        aria-label="打开侧边栏" title="打开侧边栏">
+                        aria-label="切换侧边栏" title="切换侧边栏" aria-controls="awSide" aria-expanded="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round">
                         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
                     </svg>
                 </button>
-                <span class="aw-topbar-title">Aegis</span>
+                <span class="aw-topbar-title">工作台</span>
                 <span class="aw-status" id="awStatus" data-state="idle">
                     <span class="aw-dot"></span><span id="awStatusText">空闲</span>
                 </span>
@@ -97,6 +97,7 @@
             <div class="aw-topbar-right">
                 <select class="aw-select" id="awPermSelect" title="权限模式" aria-label="权限模式">
                     <option value="approve">需用户批准</option>
+                    <option value="plan">计划模式（只读）</option>
                     <option value="full">完全访问</option>
                     <option value="chat">仅保留对话</option>
                 </select>
@@ -115,8 +116,9 @@
 
                 <!-- 视图一：入口 -->
                 <section class="aw-view is-active" id="awViewHome">
-                    <h1 class="aw-title">你好，我是 Aegis</h1>
-                    <p class="aw-sub">选一个入口开始，或直接在下方描述你的任务。</p>
+                    <p class="aw-eyebrow">AEGIS / WORKSPACE</p>
+                    <h1 class="aw-title">今天，想完成什么？</h1>
+                    <p class="aw-sub">从理解代码到实现想法，在你的工作区里推进每一步。</p>
                     <div class="aw-cards" id="awCards">
                         <button class="aw-card" type="button" data-kind="explore"
                                 data-needs-ws="0"
@@ -128,8 +130,8 @@
                                     <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/>
                                 </svg>
                             </span>
-                            <span class="aw-card-name">探索</span>
-                            <span class="aw-card-desc">检索代码库、定位文件与符号</span>
+                            <span class="aw-card-name">理解项目</span>
+                            <span class="aw-card-desc">定位文件与代码结构</span>
                             <span class="aw-card-bar" aria-hidden="true"></span>
                             <span class="aw-card-state" aria-live="polite"></span>
                         </button>
@@ -141,10 +143,10 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                      stroke="currentColor" stroke-width="2"
                                      stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/>
+                                    <path d="M12 3l9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8"/>
                                 </svg>
                             </span>
-                            <span class="aw-card-name">构建</span>
+                            <span class="aw-card-name">实现功能</span>
                             <span class="aw-card-desc">新建文件、实现功能、重构</span>
                             <span class="aw-card-bar" aria-hidden="true"></span>
                             <span class="aw-card-state" aria-live="polite"></span>
@@ -161,7 +163,7 @@
                                     <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                                 </svg>
                             </span>
-                            <span class="aw-card-name">审查</span>
+                            <span class="aw-card-name">审查代码</span>
                             <span class="aw-card-desc">检查改动、发现隐患</span>
                             <span class="aw-card-bar" aria-hidden="true"></span>
                             <span class="aw-card-state" aria-live="polite"></span>
@@ -177,7 +179,7 @@
                                     <path d="M14.7 6.3a4 4 0 0 0 5.7 5.7l-9.9 9.9-5 1 1-5z"/>
                                 </svg>
                             </span>
-                            <span class="aw-card-name">修复</span>
+                            <span class="aw-card-name">修复问题</span>
                             <span class="aw-card-desc">定位报错、修复缺陷</span>
                             <span class="aw-card-bar" aria-hidden="true"></span>
                             <span class="aw-card-state" aria-live="polite"></span>
@@ -222,9 +224,16 @@
         <div class="aw-composer-wrap">
             <div class="aw-composer-inner">
                 <form class="aw-composer" id="awComposer" autocomplete="off">
-                    <!-- 工作区入口：固定在输入区左上角，与输入框同一行 -->
+                    <div class="aw-attachments" id="awAttachments" aria-live="polite"></div>
                     <div class="aw-composer-row">
-                        <!-- 悬停提示由 JS 维护：未设置 -> 「未设置工作区」；已设置 -> 完整路径 -->
+                        <textarea class="aw-composer-input" id="awInput" rows="1"
+                                  aria-label="输入消息" placeholder="描述任务，或从上面的入口开始…"></textarea>
+                    </div>
+                    <div class="aw-composer-bar">
+                        <button class="aw-composer-btn" id="awBtnAttach" type="button"
+                                aria-label="添加文件" title="添加文本或代码文件（UTF-8，每个最多 2 MiB）">＋</button>
+                        <input id="awAttachInput" type="file" multiple hidden
+                               accept=".txt,.md,.csv,.json,.jsonl,.yaml,.yml,.toml,.ini,.log,.py,.js,.jsx,.ts,.tsx,.html,.css,.sql,.xml,.svg,.c,.cpp,.h,.java,.go,.rs,.sh,.ps1,.bat,.vue,.svelte">
                         <button class="aw-composer-btn" id="awBtnWs" type="button"
                                 aria-label="工作区" title="未设置工作区">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -232,24 +241,7 @@
                                  stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M3 7a2 2 0 0 1 2-2h3.5l2 2.5H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                             </svg>
-                        </button>
-                        <textarea class="aw-composer-input" id="awInput" rows="1"
-                                  aria-label="输入消息"></textarea>
-                    </div>
-                    <div class="aw-composer-bar">
-                        <!-- 联网搜索开关：开启时把 web_search 工具暴露给 Agent，
-                             关闭时后端不会把该工具放进工具表，全程零网络请求。 -->
-                        <button class="aw-web-toggle is-on" id="awWebToggle" type="button"
-                                role="switch" aria-checked="true"
-                                title="联网搜索开关：开启后 Aegis 可以联网检索最新资料；关闭后完全不发起任何网络请求，只用本地工作区与模型知识作答">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                 stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round"
-                                 aria-hidden="true">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            <span>联网搜索</span>
+                            <span id="awWsLabel">选择工作区</span>
                         </button>
                         <button class="aw-send" id="awSend" type="submit" aria-label="发送" title="发送" disabled>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -261,6 +253,7 @@
                         </button>
                     </div>
                 </form>
+                <div class="aw-composer-hint">Enter 发送 <span aria-hidden="true">·</span> Shift + Enter 换行 <span aria-hidden="true">·</span> 操作按当前权限执行</div>
             </div>
         </div>
     </main>
@@ -279,8 +272,46 @@
             <button class="aw-modal-close" id="awSkillClose" type="button" aria-label="关闭">×</button>
         </div>
         <div class="aw-modal-body" id="awSkillBody">
+            <div class="aw-skill-import">
+                <button class="aw-btn" id="awSkillImportFile" type="button">导入本地技能</button>
+                <input id="awSkillFile" type="file" accept=".json,.md,.zip" hidden>
+                <label for="awSkillGithub">GitHub 技能链接</label>
+                <div class="aw-field-row">
+                    <input class="aw-select" id="awSkillGithub" type="url" placeholder="https://github.com/owner/repo/tree/main/skill">
+                    <button class="aw-btn" id="awSkillImportGithub" type="button">拉取技能</button>
+                </div>
+                <p class="aw-skill-desc">支持 JSON、SKILL.md、ZIP 和公开 GitHub 链接；导入后需启用。不会自动执行外部脚本。</p>
+                <p class="aw-skill-desc" id="awSkillImportStatus" role="status"></p>
+                <details>
+                    <summary>创建自定义技能</summary>
+                    <label for="awSkillName">名称</label>
+                    <input class="aw-select" id="awSkillName" maxlength="40">
+                    <label for="awSkillInstructions">技能指令</label>
+                    <textarea class="aw-composer-input" id="awSkillInstructions" maxlength="4000" rows="4"></textarea>
+                    <button class="aw-btn" id="awSkillCreate" type="button">创建技能</button>
+                </details>
+            </div>
             <div class="aw-skill-loading" id="awSkillLoading">正在加载技能…</div>
             <div class="aw-skill-list" id="awSkillList"></div>
+        </div>
+    </div>
+</div>
+
+<div class="aw-modal" id="awAppearanceModal" hidden>
+    <div class="aw-modal-mask" id="awAppearanceMask"></div>
+    <div class="aw-modal-panel" role="dialog" aria-modal="true" aria-label="外观与侧栏">
+        <div class="aw-modal-head">
+            <span class="aw-modal-title">外观与侧栏</span>
+            <button class="aw-modal-close" id="awAppearanceClose" type="button" aria-label="关闭外观设置">×</button>
+        </div>
+        <div class="aw-modal-body aw-appearance-fields">
+            <label for="awTheme">主题</label>
+            <select class="aw-select" id="awTheme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+            <label for="awFontSize">对话字号</label>
+            <select class="aw-select" id="awFontSize"><option value="12">12</option><option value="14">14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option></select>
+            <label><input id="awSidebarCollapsed" type="checkbox"> 默认收起侧边栏</label>
+            <label><input id="awTaskDetails" type="checkbox" checked> 展开任务执行详情</label>
+            <button class="aw-btn" id="awAppearanceSave" type="button">保存外观</button>
         </div>
     </div>
 </div>
@@ -292,6 +323,7 @@
 <script src="/static/js/auth.js?v={{ static_ver }}"></script>
 <script src="/static/js/common.js?v={{ static_ver }}"></script>
 <script src="/static/js/settings.js?v={{ static_ver }}"></script>
+<script src="/static/js/workspace_extras.js?v={{ static_ver }}"></script>
 <script src="/static/js/workspace.js?v={{ static_ver }}"></script>
 </body>
 </html>

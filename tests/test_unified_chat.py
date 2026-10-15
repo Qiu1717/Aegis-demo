@@ -105,6 +105,18 @@ def test_run_route_with_invalid_workspace_still_400(fake_client):
     assert data.get("msg")
 
 
+def test_plan_mode_route_keeps_write_blocked(fake_client, ws_root):
+    from conftest import native_tool_events
+    fake_client(script=[native_tool_events("write_file", {"path": "blocked.py", "content": "x"})])
+    client, headers = _test_client()
+    response = client.post("/api/agent/run", json={"message": "分析项目", "workspace": str(ws_root),
+                           "permission_mode": "plan"}, headers=headers)
+    events = _sse_events(response.get_data(as_text=True))
+    result = next(e for e in events if e.get("type") == "tool_result")
+    assert result["error"]["code"] == "PLAN_MODE_READONLY"
+    assert not (ws_root / "blocked.py").exists()
+
+
 def test_env_endpoint_reports_ua():
     """/api/env 环境检测信息（排障用）：返回 UA 且不报错"""
     client, headers = _test_client()

@@ -38,6 +38,40 @@ for folder in ("templates", "static", "config"):
         raise SystemExit("[build.spec] 缺少待打包目录：%s" % src)
     datas.append((src, folder))
 
+# ── 1b. 洁净度闸门：禁止把本地数据/密钥打进安装包 ───────────
+#     安装包必须「全新未配置」。开发时 .env、config.user.json、*.db
+#     都躺在仓库根目录，一旦有人图省事把整个目录写进 datas 就会随包发布。
+#     这里用**白名单 + 逐文件检查**兜死：只允许下面这些扩展名进包。
+_ALLOWED_EXT = {".html", ".js", ".css", ".json", ".png", ".jpg", ".jpeg",
+                ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf",
+                ".sql", ".md", ".mermaid"}
+# 明确禁止的文件名（即使扩展名合法）
+_DENY_NAMES = {".env", "aegis.db", "aiagent.db", "config.user.json",
+               "secrets.enc", "keys.index.json", "runtime.json",
+               ".env.example"}
+
+_packaged_bad = []
+for _folder in ("templates", "static", "config"):
+    _root = os.path.join(ROOT_DIR, _folder)
+    for _dirpath, _dirnames, _filenames in os.walk(_root):
+        for _fn in _filenames:
+            _fp = os.path.join(_dirpath, _fn)
+            _rel = os.path.relpath(_fp, ROOT_DIR)
+            # .env.example 是配置模板，必须放行
+            if _fn in _DENY_NAMES and _fn != ".env.example":
+                _packaged_bad.append("%s（本地数据/密钥）" % _rel)
+                continue
+            _ext = os.path.splitext(_fn)[1].lower()
+            if _ext not in _ALLOWED_EXT:
+                _packaged_bad.append("%s（扩展名 %s 不在白名单）" % (_rel, _ext or "无"))
+
+if _packaged_bad:
+    raise SystemExit(
+        "[build.spec] 洁净度检查未通过，以下文件不应进入安装包：\n  "
+        + "\n  ".join(_packaged_bad[:20])
+        + "\n请移除这些文件，或修正本白名单。安装包必须是全新未配置版本。")
+print("[build.spec] 洁净度检查通过：待打包文件均为模板/静态资源/默认配置")
+
 # ── 2. hiddenimports：动态导入的模块必须在这里显式列出 ──────
 hiddenimports = [
     # 项目自身
