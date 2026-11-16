@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = 'E:/AI智能助手/Aiagent';
+const ROOT = path.resolve(__dirname, '..');
 const css = fs.readFileSync(path.join(ROOT, 'static/css/workspace.css'), 'utf8');
 const wsJs = fs.readFileSync(path.join(ROOT, 'static/js/workspace.js'), 'utf8');
 const commonJs = fs.readFileSync(path.join(ROOT, 'static/js/common.js'), 'utf8');
@@ -126,7 +126,7 @@ console.log('=== 缺陷4：思考状态及时结束 ===');
 const runEndIdx = wsJs.indexOf('} else if (t === "run_end") {');
 const runEndBlk = wsJs.slice(runEndIdx, runEndIdx + 700);
 ck('run_end 分支会收起生成中指示', /hideBusy\(\);/.test(runEndBlk));
-ck('首个 chunk 仍会收起（增量渲染路径）', /evt\.type === "chunk" && evt\.content\) hideBusy\(\)/.test(wsJs));
+ck('增量输出显示生成回复状态，结束事件再收起', /showBusy\("正在生成回复"\)/.test(wsJs));
 ck('正常结束路径有 hideBusy 兜底',
    /state\.sending = false;\s*\n\s*hideBusy\(\);/.test(wsJs));
 ck('异常中断路径有 hideBusy 兜底',

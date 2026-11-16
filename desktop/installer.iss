@@ -27,7 +27,7 @@
 
 #define MyAppName      "Aegis"
 #define MyAppPublisher "Aegis"
-#define MyAppVersion   "1.8.1"
+#define MyAppVersion   "1.8.2"
 #define MyAppExeName   "Aegis.exe"
 
 #ifndef MyAppSourceDir
@@ -48,7 +48,8 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 默认装到 C:\Program Files\Aegis（{autopf} 自动跟随系统位）
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
-DisableDirPage=auto
+DisableDirPage=no
+AppendDefaultDirName=no
 DisableProgramGroupPage=auto
 
 ; ── 产物输出 ──────────────────────────────────────────────

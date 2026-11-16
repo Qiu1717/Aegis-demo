@@ -46,7 +46,9 @@ test('model fetch consumes unwrapped response and sends saved-provider key with 
     await app.settings.open();
     app.nodes.stFetchModelsBtn2.handlers.click();
     await app.flush();
-    assert.deepEqual(app.nodes.stModelList.children.map(n => n.value), ['remote-model']);
+    assert.deepEqual(app.nodes.stModelList.children.map(n => n.value), ['', 'remote-model']);
+    assert.deepEqual(app.nodes.stModelList.children.map(n => n.textContent), ['选择已拉取模型', 'remote-model']);
+    assert.match(fs.readFileSync(path.join(__dirname, '../templates/agent/_settings_modal.html'), 'utf8'), /<select[^>]*id="stModelList"/);
     const payload = JSON.parse(app.requests.find(r => r.url.endsWith('/models')).options.body);
     assert.equal(payload.provider_key, 'deepseek');
     assert.equal('api_key' in payload, false);
@@ -97,4 +99,48 @@ test('key-store failure prevents false successful save and preserves draft', asy
     app.setSaveResult({key_failed: ['deepseek'], providers: []});
     await assert.rejects(app.settings.save(true), /密钥/);
     assert.equal(app.settings.state.draft.deepseek.api_key, 'test-new-key');
+});
+
+test('selecting a fetched model updates the editable name and automatic context draft',async()=>{
+    const app=load();await app.settings.open();
+    app.setModelsResult({ok:true,models:['large'],model_details:[{id:'large',context_length:1048576}],source:'remote'});
+    app.nodes.stFetchModelsBtn2.handlers.click();await app.flush();
+    app.nodes.stModelList.value='large';
+    app.nodes.stModelList.handlers.change.call(app.nodes.stModelList);
+    assert.equal(app.nodes.stModel.value,'large');
+    assert.equal(Number(app.nodes.stContextLen.value),0);
+    assert.match(app.nodes.stContextHint.textContent,/1048576/);
+    await app.settings.save(true);
+    const payload=JSON.parse(app.requests.find(r=>r.options.method==='PUT').options.body);
+    assert.equal(payload.providers[0].model,'large');
+    assert.equal(payload.providers[0].context_length,0);
+});
+
+test('an empty model result never produces a successful fetch toast',async()=>{
+    const app=load();await app.settings.open();
+    app.setModelsResult({ok:true,models:[],source:'remote'});
+    app.nodes.stFetchModelsBtn2.handlers.click();await app.flush();
+    assert(!app.toasts.some(message=>/^已获取/.test(message)));
+    assert.match(app.nodes.stContextHint.textContent,/未返回可用模型/);
+});
+
+test('a late model response cannot populate a newly edited endpoint',async()=>{
+    const app=load();await app.settings.open();let resolve;
+    app.setModelsResult(new Promise(done=>resolve=done));
+    app.nodes.stFetchModelsBtn2.handlers.click();
+    app.nodes.stBaseUrl.value='https://different.invalid';
+    resolve({ok:true,models:['stale-model'],model_details:[{id:'stale-model',context_length:1048576}]});
+    await app.flush();
+    assert(!app.nodes.stModelList.children.some(n=>n.value==='stale-model'));
+    assert(!app.toasts.some(message=>/^已获取/.test(message)));
+});
+
+test('custom provider discovery ignores a result for an edited URL',async()=>{
+    const app=load();await app.settings.open();let resolve;
+    app.nodes.stCustUrl.value='https://first.invalid';
+    app.setModelsResult(new Promise(done=>resolve=done));
+    app.nodes.stFetchModelsBtn.handlers.click();
+    app.nodes.stCustUrl.value='https://second.invalid';
+    resolve({ok:true,models:['stale-model']});await app.flush();
+    assert(!app.nodes.stCustModelList.children.some(n=>n.value==='stale-model'));
 });

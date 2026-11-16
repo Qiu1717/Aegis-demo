@@ -39,9 +39,9 @@
             <div class="aegis-field">
                 <label class="aegis-field__label" for="stModel">模型</label>
                 <div class="aegis-field__row">
-                    <input class="aegis-input" id="stModel" type="text" list="stModelList"
+                    <input class="aegis-input" id="stModel" type="text"
                            autocomplete="off" placeholder="模型名，可手填" spellcheck="false">
-                    <datalist id="stModelList"></datalist>
+                    <select class="aegis-input" id="stModelList" aria-label="可用模型"><option value="">选择模型</option></select>
                 </div>
             </div>
 
@@ -116,9 +116,9 @@
                         <label class="aegis-field__label" for="stCustModel">模型名称（Model）</label>
                         <div class="aegis-field__row">
                             <input class="aegis-input" id="stCustModel" type="text"
-                                   list="stCustModelList" autocomplete="off"
+                                   autocomplete="off"
                                    placeholder="可手填，或点右侧「拉取模型」" spellcheck="false">
-                            <datalist id="stCustModelList"></datalist>
+                            <select class="aegis-input" id="stCustModelList" aria-label="拉取的模型"><option value="">选择模型</option></select>
                             <button class="btn btn-secondary aegis-btn-sm" id="stFetchModelsBtn"
                                     type="button" title="从该地址拉取可用模型清单（OpenAI 兼容端点）">拉取模型</button>
                         </div>

@@ -306,6 +306,8 @@ class LLMClient:
                      reserve_tokens: int = 0, default: int = 6000) -> int:
         """消息总预算；包含 system，扣输出、工具描述与协议余量。"""
         reserve = max(int(reserve_tokens or self.max_tokens), 0)
+        if provider.max_output_tokens:
+            reserve = min(reserve, provider.max_output_tokens)
         tool_tokens = estimate_tokens(json.dumps(tools, ensure_ascii=False)) if tools else 0
         window = int(getattr(provider, "context_length", 0) or 32768)
         room = max(0, window - reserve - tool_tokens - 256)
@@ -400,7 +402,7 @@ class LLMClient:
             "model": p.model,
             "messages": messages,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": min(self.max_tokens, p.max_output_tokens) if p.max_output_tokens else self.max_tokens,
             "stream": stream,
         }
         # 用户填写的窗口只是本地预算；服务商仍会执行自身的物理上限。

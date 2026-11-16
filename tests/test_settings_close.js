@@ -10,7 +10,7 @@
  * 一直「测不出来」的原因。
  */
 const fs = require('fs');
-const js = fs.readFileSync('E:/AI智能助手/Aiagent/static/js/settings.js', 'utf8');
+const js = fs.readFileSync(require('path').join(__dirname, '../static/js/settings.js'), 'utf8');
 
 let pass = 0, fail = 0;
 const ck = (n, c, x) => { if (c) { console.log('  PASS  ' + n); pass++; }

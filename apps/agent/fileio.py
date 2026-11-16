@@ -5,7 +5,7 @@ apps/agent/fileio.py — 文件读写：原子写 + 任务级备份 + unified di
 写文件的**唯一**合法路径（设计 §4.4.3）：
 
     1. 沙箱校验路径（越界直接抛 SandboxError）
-    2. 文件已存在 → 复制到 .aegis_backup/<task_id>/<rel>（保留目录结构）
+    2. 文件已存在 → 复制到 .aegis_backup/<task_id>/<rel>（后续写入独立备份）
        文件不存在 → 记 action=created（撤销时删除）
     3. 写同目录临时文件 <name>.aegis-tmp-<rand>
     4. os.replace(tmp, target)          # 原子替换，避免半截文件
@@ -15,6 +15,7 @@ apps/agent/fileio.py — 文件读写：原子写 + 任务级备份 + unified di
 **备份失败 → 中止写入（`BACKUP_FAILED`），绝不裸写。**
 """
 import difflib
+import hashlib
 import os
 import uuid
 from pathlib import Path
@@ -117,14 +118,25 @@ def backup_file(ws: Workspace, task_id: str, rel: str) -> Tuple[str, str]:
     if not target.exists():
         return "", ACTION_CREATED
 
-    backup_abs = ws.root / BACKUP_ROOT / str(task_id) / Path(clean_rel)
     try:
+        task = str(task_id)
+        if not task or task in (".", "..") or any(c in task for c in "/\\:"):
+            raise ValueError("任务 ID 不能包含路径")
+        backup_abs = ws.resolve(backup_rel_path(task, clean_rel))
         backup_abs.parent.mkdir(parents=True, exist_ok=True)
         with open(str(target), "rb") as src:
             data = src.read()
-        with open(str(backup_abs), "wb") as dst:
+        try:
+            dst = open(str(backup_abs), "xb")
+        except FileExistsError:
+            if not backup_abs.is_file():
+                raise OSError("备份落点不是文件")
+            # 首份路径保持兼容；后续快照独立保存，绝不覆盖旧快照。
+            backup_abs = ws.resolve(str(backup_abs) + "." + uuid.uuid4().hex)
+            dst = open(str(backup_abs), "xb")
+        with dst:
             dst.write(data)
-    except OSError:
+    except (OSError, ValueError, SandboxError):
         raise ToolError("BACKUP_FAILED",
                         "备份失败，已中止写入（绝不裸写）：%s" % clean_rel)
 
@@ -196,6 +208,7 @@ def write_file(ws: Workspace, changeset: ChangeSet, rel: str, content: str,
             old_text = ""
 
     backup_rel, action = backup_file(ws, changeset.task_id, rel)
+    before_hash = hashlib.sha256(ws.resolve(backup_rel).read_bytes()).hexdigest() if backup_rel else None
 
     if not create_dirs and not target.parent.exists():
         raise ToolError("INVALID_ARGUMENT",
@@ -216,6 +229,8 @@ def write_file(ws: Workspace, changeset: ChangeSet, rel: str, content: str,
         backup_path=backup_rel or None,
         size=size,
         diff=diff,
+        before_hash=before_hash,
+        after_hash=hashlib.sha256((content or "").encode("utf-8")).hexdigest(),
     )
     return {
         "path": clean_rel,
@@ -279,6 +294,7 @@ def edit_file(ws: Workspace, changeset: ChangeSet, rel: str, old_text: str,
     updated = _replace_nth(original, old_text, new_text, index)
 
     backup_rel, action = backup_file(ws, changeset.task_id, rel)
+    before_hash = hashlib.sha256(ws.resolve(backup_rel).read_bytes()).hexdigest() if backup_rel else None
     atomic_write(target, updated)
 
     try:
@@ -294,6 +310,8 @@ def edit_file(ws: Workspace, changeset: ChangeSet, rel: str, old_text: str,
         backup_path=backup_rel or None,
         size=size,
         diff=diff,
+        before_hash=before_hash,
+        after_hash=hashlib.sha256(updated.encode("utf-8")).hexdigest(),
     )
     return {
         "path": clean_rel,

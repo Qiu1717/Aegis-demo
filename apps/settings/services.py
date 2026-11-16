@@ -16,6 +16,7 @@ import math
 import os
 import re
 import time
+import threading
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -56,6 +57,12 @@ _TEST_TIMEOUT = 20
 _MODELS_TIMEOUT = 12
 #: 模型清单最多返回多少条（防止某些中转站返回上万条把前端撑爆）
 _MODELS_LIMIT = 300
+_MODEL_DISCOVERIES = {}
+_MODEL_DISCOVERIES_LOCK = threading.Lock()
+
+
+def _model_discovery_key(base_url, secret):
+    return (str(paths.data_dir()), base_url, llm_providers.model_credential(secret))
 
 
 # ── 包初始化：把 GUI 密钥库挂到 providers 的密钥解析链上 ────
@@ -183,6 +190,7 @@ def _provider_view(key: str) -> Dict[str, Any]:
     has_key = bool(cfg.get("has_key")) or bool(provider.api_key)
     env_names = cfg.get("auth_env") or preset.get("auth_env") or []
     from_env = bool(llm_providers._first_env(env_names))
+    details = llm_providers.discovered_models(cfg, provider.base_url, provider.api_key)
 
     return {
         "key": key,
@@ -192,7 +200,8 @@ def _provider_view(key: str) -> Dict[str, Any]:
         "base_url": cfg.get("base_url") or preset.get("base_url", ""),
         "model": cfg.get("model") or preset.get("default_model", ""),
         "timeout": int(cfg.get("timeout") or _llm_section().get("timeout", 60)),
-        "candidate_models": list(preset.get("candidate_models") or []),
+        "candidate_models": [item["id"] for item in details] if details else list(preset.get("candidate_models") or []),
+        "model_details": details,
         "free_note": preset.get("free_note", ""),
         "key_url": preset.get("key_url", ""),
         "requires_key": bool(provider.requires_key),
@@ -209,6 +218,8 @@ def _provider_view(key: str) -> Dict[str, Any]:
         "context_length": int(cfg.get("context_length") or 0),
         # 供前端提示用：该厂商当前实际生效的窗口
         "context_length_effective": int(provider.context_length or 0),
+        "model_context_length": provider.model_context_length,
+        "context_source": provider.context_source,
     }
 
 
@@ -413,6 +424,8 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
             entry["label"] = label.strip()
         model = item.get("model")
         if isinstance(model, str) and model.strip():
+            if model.strip() != entry.get("model") and "context_length" not in item:
+                entry["context_length"] = 0
             entry["model"] = model.strip()
         timeout = item.get("timeout")
         if isinstance(timeout, (int, float)) and timeout > 0:
@@ -436,6 +449,13 @@ def save_providers(payload: Dict[str, Any]) -> Dict[str, Any]:
                 key_failed.append(key)
                 logger.error("保存 %s 的密钥失败或回读校验未通过（本机密钥库不可用）", key)
 
+        provider = build_provider(key, entry)
+        discovery_key = _model_discovery_key(provider.base_url, provider.api_key)
+        with _MODEL_DISCOVERIES_LOCK:
+            details = _MODEL_DISCOVERIES.get(discovery_key)
+        if details is not None:
+            entry.update(model_details=details, model_details_base_url=provider.base_url,
+                         model_details_credential=discovery_key[2])
         providers_user[key] = entry
 
     llm_user["providers"] = providers_user
@@ -613,6 +633,7 @@ def list_models(provider_key: str,
                 "models": _preset_models(key), "source": "preset", "latency_ms": latency_ms}
 
     models: List[str] = []
+    details = {}
     if isinstance(items, list):
         for it in items:
             name = ""
@@ -626,9 +647,13 @@ def list_models(provider_key: str,
                         break
             if name and name not in models:
                 models.append(name)
+                item = it if isinstance(it, dict) else {}
+                details[name] = {"id": name, "name": str(item.get("name") or name)[:256],
+                    "context_length": llm_providers.model_limit(item.get("context_window") or item.get("context_length")),
+                    "max_output_tokens": llm_providers.model_limit(item.get("max_output_tokens") or item.get("max_completion_tokens"))}
 
-    if items and not models:
-        return {"ok": False, "error": {"code": "BAD_RESPONSE", "reason": "模型列表中没有有效模型标识",
+    if not models:
+        return {"ok": False, "error": {"code": "BAD_RESPONSE" if items else "EMPTY_MODELS", "reason": "模型列表中没有有效模型标识",
                                       "action": "检查服务商模型列表的响应格式"},
                 "models": _preset_models(key), "source": "preset", "latency_ms": latency_ms}
     source = "remote"
@@ -636,8 +661,28 @@ def list_models(provider_key: str,
         models = models[:_MODELS_LIMIT]
 
     models.sort(key=str.lower)
-    return {"ok": True, "models": models, "source": source,
-            "latency_ms": latency_ms, "count": len(models)}
+    result = {"ok": True, "models": models, "source": source,
+              "model_details": [details[name] for name in models],
+              "latency_ms": latency_ms, "count": len(models)}
+    discovery_key = _model_discovery_key(provider.base_url, secret)
+    with _MODEL_DISCOVERIES_LOCK:
+        _MODEL_DISCOVERIES[discovery_key] = result["model_details"]
+        if len(_MODEL_DISCOVERIES) > 16:
+            _MODEL_DISCOVERIES.pop(next(iter(_MODEL_DISCOVERIES)))
+    saved_provider = build_provider(key, _providers_section().get(key) or {})
+    if key != "__custom_probe__" and provider.base_url == saved_provider.base_url and secret == saved_provider.api_key:
+        user_cfg = read_user_config()
+        entry = user_cfg.setdefault("llm", {}).setdefault("providers", {}).setdefault(key, {})
+        entry["model_details"] = result["model_details"]
+        entry["model_details_base_url"] = provider.base_url
+        entry["model_details_credential"] = discovery_key[2]
+        if not write_user_config(user_cfg):
+            result.update(ok=False, error={"code": "SAVE_FAILED", "reason": "已拉取模型，但清单保存失败，请重试"})
+        else:
+            apps.reload_config()
+            from apps.llm import reset_client
+            reset_client()
+    return result
 
 
 def _public_error(status_or_exc) -> Dict[str, Any]:

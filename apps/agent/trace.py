@@ -12,15 +12,18 @@ SQL 一律用 `%s` 占位符（`apps.execute()` 内部会转成 `?` 适配 SQLit
 metadata 列由 `apps/__init__.py::_init_sqlite` 的兼容迁移补上；
 若目标库（如 MySQL）确实没有该列，则自动降级为不带 metadata 的写入，绝不报错。
 """
+import hashlib
 import json
 import os
 import shutil
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 import apps
 from apps import logger
+from .sandbox import SandboxError, Workspace
 
 # ── message_type 取值（在既有 'text' 之上扩展）─────────────
 MSG_TEXT = "text"
@@ -62,6 +65,8 @@ class ChangeRecord:
     bytes: int = 0
     diff: Optional[str] = None
     created_at: str = field(default_factory=_now_str)
+    before_hash: Optional[str] = None
+    after_hash: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -73,6 +78,8 @@ class ChangeRecord:
             "bytes": self.bytes,
             "diff": self.diff,
             "created_at": self.created_at,
+            "before_hash": self.before_hash,
+            "after_hash": self.after_hash,
         }
 
 
@@ -89,7 +96,8 @@ class ChangeSet:
         return self._seq
 
     def add(self, path: str, action: str, backup_path: Optional[str] = None,
-            size: int = 0, diff: Optional[str] = None) -> ChangeRecord:
+            size: int = 0, diff: Optional[str] = None,
+            before_hash: Optional[str] = None, after_hash: Optional[str] = None) -> ChangeRecord:
         record = ChangeRecord(
             change_id=self.next_id(),
             task_id=self.task_id,
@@ -98,6 +106,8 @@ class ChangeSet:
             backup_path=backup_path,
             bytes=int(size or 0),
             diff=diff,
+            before_hash=before_hash,
+            after_hash=after_hash,
         )
         self.records.append(record)
         return record
@@ -128,37 +138,66 @@ class ChangeSet:
         restored = 0
         removed = 0
         failed: List[dict] = []
-        root = self.workspace
+        done_ids = set()
 
         for record in targets:
+            tmp_path = None
             try:
-                target = os.path.join(root, record.path.replace("/", os.sep))
+                ws = Workspace(self.workspace)
+                target = ws.resolve(record.path)
+                for newer in self.records:
+                    if newer.change_id <= record.change_id or newer.change_id in done_ids:
+                        continue
+                    try:
+                        newer_target = ws.resolve(newer.path)
+                    except (SandboxError, OSError, ValueError):
+                        continue  # 无效记录单独报告，不阻塞其他文件。
+                    if newer_target == target:
+                        raise ValueError("同一文件存在较新变更，请先撤销较新条目")
+                if record.action not in (ACTION_CREATED, ACTION_MODIFIED, ACTION_DELETED):
+                    raise ValueError("未知变更类型，无法安全撤销")
+                if ((record.action != ACTION_DELETED and not record.after_hash)
+                        or (record.action != ACTION_CREATED and not record.before_hash)):
+                    raise ValueError("旧变更记录缺少内容校验信息，请手动核对备份后还原，已拒绝自动撤销")
+                if record.action == ACTION_DELETED:
+                    if target.exists():
+                        raise ValueError("文件已被重新创建，已保留当前文件")
+                elif not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != record.after_hash:
+                    raise ValueError("文件在该次变更后已被修改或删除，已保留当前状态")
                 if record.action == ACTION_CREATED:
-                    if os.path.exists(target):
-                        os.remove(target)
-                        removed += 1
+                    target.unlink()
+                    removed += 1
+                    done_ids.add(record.change_id)
                     continue
 
-                backup = None
-                if record.backup_path:
-                    backup = os.path.join(root, record.backup_path.replace("/", os.sep))
-                if not backup or not os.path.isfile(backup):
-                    failed.append({"change_id": record.change_id,
-                                   "reason": "备份文件缺失，无法还原"})
-                    continue
-                parent = os.path.dirname(target)
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
-                shutil.copy2(backup, target)
+                backup = ws.resolve(record.backup_path) if record.backup_path else None
+                if not backup or not backup.is_file():
+                    raise ValueError("备份文件缺失，无法还原")
+                if hashlib.sha256(backup.read_bytes()).hexdigest() != record.before_hash:
+                    raise ValueError("备份内容已改变，已拒绝还原")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = target.with_name(target.name + ".aegis-tmp-" + uuid.uuid4().hex)
+                shutil.copy2(backup, tmp_path)
+                os.replace(tmp_path, target)
                 restored += 1
+                done_ids.add(record.change_id)
+            except (ValueError, SandboxError) as e:
+                reason = e.message if isinstance(e, SandboxError) else str(e)
+                logger.warning("撤销变更失败 change_id=%s：%s", record.change_id, reason)
+                failed.append({"change_id": record.change_id, "reason": reason})
             except OSError as e:
                 logger.warning("撤销变更失败 change_id=%s：%s", record.change_id, e)
                 failed.append({"change_id": record.change_id,
                                "reason": "文件系统错误，请查看日志"})
+            finally:
+                if tmp_path is not None:
+                    try:
+                        tmp_path.unlink(missing_ok=True)
+                    except OSError:
+                        logger.warning("撤销临时文件清理失败 change_id=%s", record.change_id)
 
         # 成功撤销的条目从清单里剔除，避免重复撤销
-        done_ids = {r.change_id for r in targets} if not failed else set()
-        if done_ids and not failed:
+        if done_ids:
             self.records = [r for r in self.records if r.change_id not in done_ids]
         return {"restored": restored, "removed": removed, "failed": failed}
 

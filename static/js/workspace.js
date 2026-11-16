@@ -19,6 +19,7 @@
 
     var AUTH = window.AegisAuth;
     var extras = window.AegisWorkspaceExtras;
+    var modelPicker = window.AegisModelPicker;
 
     function $(id) { return document.getElementById(id); }
 
@@ -59,6 +60,7 @@
     var elTaskMeta = $("awTaskMeta");
     var elSteps = $("awSteps");
     var elTools = $("awTools");
+    var elApprovals = $("awApprovals");
     var elTaskEmpty = $("awTaskEmpty");
 
     /* sessionId：当前会话；sending：是否有任务在跑（唯一的发送按钮控制位）；
@@ -316,6 +318,10 @@
                现在改为：有内容就能发；若上一轮仍在跑，send() 会先中止它。 */
             has = has || (extras && extras.files().length > 0);
             elSend.disabled = !state.sending && (!has || (extras && extras.uploading()));
+            if (modelPicker) {
+                modelPicker.setBusy(state.sending);
+                if (!state.sending && modelPicker.saving()) elSend.disabled = true;
+            }
             if (extras) extras.setBusy(state.sending);
             /* 生成中把按钮切成「停止」语义：视觉上给出明确反馈，
                也避免用户误以为可以再发一条造成重复提交。 */
@@ -832,6 +838,7 @@
         if (elTask) elTask.hidden = true;
         if (elSteps) elSteps.textContent = "";
         if (elTools) elTools.textContent = "";
+        if (elApprovals) elApprovals.textContent = "";
         if (elTaskEmpty) {
             elTaskEmpty.hidden = false;
             elTaskEmpty.textContent = "正在启动…";
@@ -922,10 +929,7 @@
         }
     }
 
-    /* ── 审批卡片（工具执行需用户确认）───────────────────
-       权限模式为 approve/full 之外的写操作与命令，Runner 会先发
-       approval_request 再阻塞等待决策。没有这段 UI，用户既看不到请求
-       也无法提交决策，只能干等到 300s 超时，期间发送状态一直卡着。 */
+    /* 审批卡片独立于可折叠的执行详情，不能随详情一起隐藏。 */
     var AP_KIND_LABELS = {
         file_write: "写入文件",
         file_edit: "修改文件",
@@ -940,15 +944,16 @@
     };
 
     function appendApproval(evt) {
-        if (!elTools) {
+        var container = elApprovals || elTools;
+        if (!container) {
             /* 兜底：万一任务面板缺失，也不能把用户卡在等待里。
                退化为原生确认弹窗：确定=允许一次，取消=拒绝。 */
-            var allow = true;
+            var allow = false;
             try {
                 allow = window.confirm
                     ? window.confirm("Aegis 想要执行：" + (evt.title || "工具操作")
                         + "\n\n确定允许吗？（取消 = 拒绝）")
-                    : true;
+                    : false;
             } catch (e) { /* 忽略 */ }
             resolveApproval(evt.request_id, allow ? "allow_once" : "deny", null, null);
             return;
@@ -992,7 +997,7 @@
         });
         node.appendChild(actions);
 
-        elTools.appendChild(node);
+        container.appendChild(node);
 
         /* 审批必须让用户一眼看到，否则他会以为「发送按钮卡死」：
            ① 展开任务面板；② 弹 toast；③ 把卡片滚动进可视区；
@@ -1000,7 +1005,7 @@
         if (elTask) elTask.hidden = false;
         if (elTaskEmpty) elTaskEmpty.hidden = true;
         setStatus("waiting", "等待你确认");
-        toast("需要你确认一项操作，请在任务面板选择允许或拒绝");
+        toast("需要你确认一项操作，请在对话下方选择允许或拒绝");
         try {
             if (node.scrollIntoView) {
                 node.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1010,7 +1015,6 @@
             var firstBtn = actions.querySelector("button");
             if (firstBtn) firstBtn.focus();
         } catch (e) { /* 忽略 */ }
-        scrollBottom();
     }
 
     function resolveApproval(requestId, decision, node, actions) {
@@ -1041,12 +1045,15 @@
     }
 
     function markApprovalResolved(evt) {
-        if (!elTools) return;
-        var nodes = elTools.querySelectorAll(".aw-approval");
+        var container = elApprovals || elTools;
+        if (!container) return;
+        var nodes = container.querySelectorAll(".aw-approval");
         var rid = evt.request_id || "";
         for (var i = 0; i < nodes.length; i++) {
             if (nodes[i].getAttribute("data-request-id") === rid) {
                 nodes[i].classList.add("is-resolved");
+                var buttons = nodes[i].querySelectorAll("button");
+                for (var j = 0; j < buttons.length; j++) buttons[j].disabled = true;
             }
         }
         setStatus("running", "执行中");
@@ -1103,6 +1110,7 @@
             stopRun();
             return;
         }
+        if (modelPicker && modelPicker.saving()) { toast("请等待模型切换完成"); return; }
         var files = extras ? extras.files() : [];
         var text = elInput.value.trim() || (files.length ? "请分析所附文件。" : "");
         if (!text) return;
@@ -1117,7 +1125,29 @@
            只有 myId 仍等于当前轮次时才允许改动标记，避免上一轮的收尾
            误标下一轮（并发场景下会导致新请求刚发出就被判为「已停止」）。 */
         var stoppedByUser = false;
-        function isCurrentRun() { return myId === runSeq && !stoppedByUser; }
+        var finished = false;
+        var terminalEvent = null;
+        function isCurrentRun() { return myId === runSeq && !stoppedByUser && !finished; }
+        function releaseRun() {
+            if (watchdog) clearTimeout(watchdog);
+            if (stallTimer) clearInterval(stallTimer);
+            if (!isCurrentRun()) return;
+            finished = true;
+            if (activeRun.id === myId) {
+                activeRun.controller = null;
+                activeRun.watchdog = null;
+                activeRun.stallTimer = null;
+                activeRun.taskId = "";
+                activeRun.cancelNotified = false;
+            }
+            state.markStopped = null;
+            state.awaitingApproval = false;
+            state.approvalSince = 0;
+            state.sending = false;
+            hideBusy();
+            syncSend();
+            if (elInput) elInput.focus();
+        }
         var markStopped = function () { if (myId === runSeq) stoppedByUser = true; };
         state.markStopped = markStopped;
         /* 新一轮开始：清掉上一轮遗留的取消标记，避免 cancel 被误判为「已通知」
@@ -1146,6 +1176,7 @@
             answerEl = addMsg("assistant", "");
             resetTask();
             setStatus("running", "运行中");
+            showBusy("正在思考");
         } catch (e) {
             state.sending = false;
             try { syncSend(); } catch (e2) { /* 忽略 */ }
@@ -1241,7 +1272,10 @@
             }
             return pump(resp, answerEl,
                 function (full) { acc = full; },
-                function () { lastEventAt = Date.now(); }, isCurrentRun);
+                function (event) {
+                    lastEventAt = Date.now();
+                    if (event.type === "run_end" || event.type === "done" || event.type === "error") terminalEvent = event;
+                }, isCurrentRun);
         });
 
         /* 两条并行链路都结束后才算本轮收尾；sessionReady 已在上面挂了
@@ -1251,21 +1285,20 @@
             if (!isCurrentRun()) return;
             // 以「界面实际渲染出的文本」为准判空：只要显示过内容就保留，
             // 真正为空才给占位提示（既不覆盖已显示内容，也不把空响应误判为成功）。
-            /* 用户主动停止：已渲染的内容**原样保留**（那是花钱跑出来的结果，
-               抹掉反而让人白等一场），也不改状态文案 —— stopRun 已经
-               把状态置为「已停止」，这里若再写「空闲」会把它覆盖掉，
-               造成「界面说空闲、后端其实刚被取消」的状态不一致。 */
-            if (stoppedByUser) {
-                stopRun();
-                return;
-            }
             var shown = (answerEl && answerEl.textContent) ? answerEl.textContent : (acc || "");
             if (!shown.trim() && answerEl) answerEl.textContent = "（本次没有返回文本结果）";
+            var reason = terminalEvent && terminalEvent.stats && terminalEvent.stats.stopped_by;
+            var failed = terminalEvent && (terminalEvent.type === "error" || ["error", "no_model", "tool_errors"].indexOf(reason) >= 0);
+            var stopped = reason === "user" || reason === "denied";
             hideBusy();
-            setStatus("idle", "空闲");
-            setRunState("done");
+            setStatus("idle", failed ? "任务失败" : (stopped ? "已停止" : "空闲"));
+            finishTask(terminalEvent, !failed && !stopped);
+            if (stopped && elTaskStatusText) elTaskStatusText.textContent = "已停止";
+            setRunState(failed ? "failed" : (stopped ? "stopped" : "done"));
             syncCards();
-            return loadSessions();
+            releaseRun();
+            // 侧栏刷新不能阻塞下一轮发送。
+            loadSessions();
         }).catch(function (err) {
             if (!isCurrentRun()) return;
             // 该处理函数自身绝不能再抛异常：一旦抛出，后面的复位 .then()
@@ -1279,10 +1312,6 @@
                      或审批封顶。此时**后端可能仍在跑**（我们只是不再读它的流），
                      所以除了断流还必须发 /api/agent/cancel 让它真停，
                      并且如实告知「已停止等待」而不是谎称「已停止生成」。 */
-                if (stoppedByUser) {
-                    stopRun();
-                    return;
-                }
                 if (isAbort) {
                     abortActiveRun(true);
                     state.sending = false;
@@ -1313,27 +1342,7 @@
                 /* 只有真出错才给一键重试，重试用本轮原文（state.lastPrompt），不丢上下文。 */
                 showRetry(text, msg);
             } catch (e) { /* 忽略：复位逻辑必须继续执行 */ }
-        }).then(function () {
-            // 无论成功/失败/超时，这里都必须执行，否则发送状态不会复位
-            if (watchdog) clearTimeout(watchdog);
-            if (stallTimer) clearInterval(stallTimer);
-            if (!isCurrentRun()) return;
-            // 只有仍是"自己这一轮"时才清空 activeRun，避免误清新一轮的句柄
-            if (activeRun.id === myId) {
-                activeRun.controller = null;
-                activeRun.watchdog = null;
-                activeRun.stallTimer = null;
-                activeRun.taskId = "";
-                activeRun.cancelNotified = false;
-            }
-            state.markStopped = null;
-            state.awaitingApproval = false;
-            state.approvalSince = 0;
-            state.sending = false;
-            hideBusy();
-            syncSend();
-            if (elInput) elInput.focus();
-        });
+        }).then(releaseRun);
     }
 
     /* SSE 解析 */
@@ -1343,13 +1352,21 @@
         var buf = "";
         var acc = "";
 
+        function cancelReader() {
+            try {
+                var cancelled = reader.cancel();
+                if (cancelled && cancelled.catch) cancelled.catch(function () {});
+            } catch (e) { /* 读取收尾不阻塞发送状态复位 */ }
+        }
+
         function step() {
             return reader.read().then(function (r) {
                 if (!isCurrentRun()) {
-                    return reader.cancel().then(function () { return acc; });
+                    cancelReader();
+                    return acc;
                 }
-                if (r.done) return acc;
-                buf += decoder.decode(r.value, { stream: true });
+                buf = (buf + (r.done ? decoder.decode() : decoder.decode(r.value, { stream: true }))).replace(/\r\n/g, "\n");
+                if (r.done && buf.trim()) buf += "\n\n";
 
                 var idx;
                 while ((idx = buf.indexOf("\n\n")) !== -1) {
@@ -1374,10 +1391,15 @@
                         } catch (e) { /* 忽略：继续处理后续事件 */ }
                         // 每收到一个事件就打一次心跳，供停顿看门狗判断是否僵死
                         if (onEvent) { try { onEvent(evt); } catch (e) { /* 忽略 */ } }
+                        if (evt.type === "run_end" || evt.type === "done" || evt.type === "error") {
+                            if (onText) onText(acc);
+                            cancelReader();
+                            return acc;
+                        }
                     }
                 }
                 if (onText) onText(acc);
-                return step();
+                return r.done ? acc : step();
             });
         }
         return step();
@@ -1416,10 +1438,24 @@
             showBusy(evt.title || "Aegis 正在处理…");
         } else if (t === "agent_step") {
             addStep(evt.step, evt.title);
+            setStatus("running", "正在思考");
+            showBusy("正在思考");
         } else if (t === "tool_call") {
             addTool(evt);
+            showBusy("正在准备工具调用");
+        } else if (t === "tool_start") {
+            var toolNames = {read_file:"读取文件", list_dir:"浏览目录", search_code:"搜索代码",
+                write_file:"写入文件", edit_file:"修改文件", web_search:"联网搜索", read_skill_resource:"读取技能资源"};
+            var activity = evt.tool === "run_command" ? "正在运行命令"
+                : "正在调用工具：" + (toolNames[evt.tool] || evt.tool || "工具");
+            setStatus("running", activity);
+            showBusy(activity);
+        } else if (t === "terminal") {
+            showBusy("正在运行命令");
         } else if (t === "tool_result") {
             fillToolResult(evt);
+            showBusy("正在思考");
+            setStatus("running", "正在思考");
         } else if (t === "approval_request") {
             state.awaitingApproval = true;
             if (!state.approvalSince) state.approvalSince = Date.now();
@@ -1437,14 +1473,17 @@
             markApprovalResolved(evt);
         } else if (t === "paused") {
             setStatus("paused", "已暂停");
+            showBusy("已暂停，等待继续");
         } else if (t === "resumed") {
             setStatus("running", "运行中");
+            showBusy("正在思考");
         } else if (t === "chunk" || t === "notice") {
             var acc2 = (answerEl ? answerEl.textContent : "") + (evt.content || "");
             if (answerEl) answerEl.textContent = acc2;
-            /* 首个 chunk 到达 = 已经有实际输出了，收起「生成中」指示，
-               避免它和正在增长的正文同时出现造成视觉冗余。 */
-            if (evt.type === "chunk" && evt.content) hideBusy();
+            if (evt.type === "chunk" && evt.content) {
+                showBusy("正在生成回复");
+                setStatus("running", "正在生成回复");
+            }
             /* 不再无条件置底：用户上滑查看历史时保持当前位置（见 scrollBottom）。 */
             scrollBottom();
             // 关键：把累积结果回报给 pump/send 的累加器。
@@ -1452,13 +1491,9 @@
             // 末尾 send() 误判「无文本」并把已显示的内容覆盖成占位文案。
             if (onText) onText(acc2);
         } else if (t === "run_end") {
+            if (evt.session_id != null) state.sessionId = evt.session_id;
             state.awaitingApproval = false;
-            /* run_end 是后端给出的**权威结束信号**，必须在这里收起「生成中」指示。
-               此前唯一的隐藏路径是 chunk 分支的 hideBusy()，于是当模型一次性
-               返回完整回复（没有中间 chunk，或 chunk 迟到）时，指示条会一直
-               留着「正在思考」——回复都出完了还在转（缺陷4）。
-               同时 approval_request/paused 等中间态各自也会重新 showBusy，
-               所以这里无条件收起不会误伤「长任务仍在进行」的状态。 */
+            // 执行状态持续到权威结束事件，不因收到部分文本而提前收起。
             hideBusy();
             // 后端 run_end 目前只带 task_id/stats（无 final 字段），
             // 但保留兜底：若将来带回最终文本且界面还没内容，则填充并同步累加器。
@@ -1789,6 +1824,7 @@
 
     /* ── 启动 ───────────────────────────────────────────── */
     window.addEventListener("aegis:attachments-changed", syncSend);
+    window.addEventListener("aegis:model-selection-changed", syncSend);
     if (AUTH && elThinkSelect) {
         AUTH.get("/api/settings/thinking").then(function (info) { if (info && info.level) elThinkSelect.value = info.level; }).catch(function () {});
         elThinkSelect.addEventListener("change", function () {
@@ -1797,12 +1833,14 @@
     }
 
     if (AUTH && elPermSelect) {
+        var permissionChanged = false;
         AUTH.get("/api/settings/permission").then(function (info) {
-            if (info && ["approve", "full", "plan", "chat"].indexOf(info.mode) >= 0) {
+            if (!permissionChanged && info && ["approve", "full", "plan", "chat"].indexOf(info.mode) >= 0) {
                 elPermSelect.value = info.mode;
             }
         }).catch(function () {});
         elPermSelect.addEventListener("change", function () {
+            permissionChanged = true;
             AUTH.put("/api/settings/permission", { mode: elPermSelect.value })
                 .catch(function () { toast("权限模式保存失败，本轮仍使用当前选择"); });
         });

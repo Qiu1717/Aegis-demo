@@ -26,7 +26,7 @@ set "PYEXE=%VENV%\Scripts\python.exe"
 set "PIPEXE=%VENV%\Scripts\pip.exe"
 set "PYIEXE=%VENV%\Scripts\pyinstaller.exe"
 REM  版本号需与 desktop\app.py 的 __version__、installer.iss 的 MyAppVersion 保持一致
-set "VERSION=1.8.1"
+set "VERSION=1.8.2"
 set "PATTERN=%TEMP%\aegis-scan-patterns.txt"
 set "HITS=%TEMP%\aegis-scan-hits.txt"
 set "HIT=0"

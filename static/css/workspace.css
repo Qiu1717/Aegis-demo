@@ -1184,6 +1184,13 @@ body.aw-task-compact .aw-task-body { display: none; }
                 transform var(--aw-t-hover) ease;
 }
 
+.aw-model-select { max-width: 190px; min-width: 0; }
+.aw-model-context { font-size: 11px; color: var(--aw-text-3); white-space: nowrap; }
+@media (max-width: 560px) {
+    .aw-model-select { max-width: 125px; }
+    .aw-model-context { display: none; }
+}
+
 .aw-send:hover:not(:disabled) { background: var(--aw-primary-hover); transform: scale(1.06); }
 .aw-send:disabled { opacity: 0.45; cursor: not-allowed; }
 

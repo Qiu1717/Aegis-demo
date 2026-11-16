@@ -270,3 +270,161 @@ def test_undo_created_removes_file(ws, ws_root):
     out = cs.undo()
     assert out["removed"] == 1
     assert not (ws_root / "tmp_new.py").exists()
+
+
+def test_repeated_write_keeps_each_backup_and_undo_restores_original(ws, ws_root):
+    original = (ws_root / "app.py").read_bytes()
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    first = fileio.write_file(ws, cs, "app.py", "first\n")
+    second = fileio.edit_file(ws, cs, "app.py", "first", "second")
+    assert first["backup_path"] != second["backup_path"]
+    assert (ws_root / first["backup_path"]).read_bytes() == original
+    assert (ws_root / second["backup_path"]).read_bytes() == b"first\n"
+    assert cs.undo() == {"restored": 2, "removed": 0, "failed": []}
+    assert (ws_root / "app.py").read_bytes() == original
+    assert cs.records == []
+
+
+def test_each_write_can_be_undone_then_created_file_removed(ws, ws_root):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    first = fileio.write_file(ws, cs, "new.py", "first\n")
+    second = fileio.write_file(ws, cs, "new.py", "second\n")
+    assert cs.undo(second["change_id"]) == {"restored": 1, "removed": 0, "failed": []}
+    assert (ws_root / "new.py").read_bytes() == b"first\n"
+    assert cs.undo(first["change_id"]) == {"restored": 0, "removed": 1, "failed": []}
+    assert not (ws_root / "new.py").exists()
+
+
+@pytest.mark.parametrize("rel", ["app.py", "created.py"])
+def test_undo_preserves_later_manual_edits(ws, ws_root, rel):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    change = fileio.write_file(ws, cs, rel, "agent\n")
+    (ws_root / rel).write_bytes(b"manual\n")
+    out = cs.undo()
+    assert out["restored"] == out["removed"] == 0
+    assert [f["change_id"] for f in out["failed"]] == [change["change_id"]]
+    assert (ws_root / rel).read_bytes() == b"manual\n"
+    assert len(cs.records) == 1
+
+
+def test_undo_older_change_rejected_even_if_contents_match(ws, ws_root):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    first = fileio.write_file(ws, cs, "app.py", "same\n")
+    fileio.write_file(ws, cs, "app.py", "same\n")
+    out = cs.undo(first["change_id"])
+    assert len(out["failed"]) == 1
+    assert (ws_root / "app.py").read_bytes() == b"same\n"
+    assert len(cs.records) == 2
+
+
+def test_partial_undo_removes_successful_records_and_keeps_blocked_chain(ws, ws_root):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    first = fileio.write_file(ws, cs, "app.py", "first\n")
+    second = fileio.write_file(ws, cs, "app.py", "second\n")
+    fileio.write_file(ws, cs, "created.py", "created\n")
+    (ws_root / "app.py").write_bytes(b"manual\n")
+    out = cs.undo()
+    assert out["removed"] == 1 and out["restored"] == 0
+    assert {f["change_id"] for f in out["failed"]} == {first["change_id"], second["change_id"]}
+    assert [r.change_id for r in cs.records] == [first["change_id"], second["change_id"]]
+    assert (ws_root / "app.py").read_bytes() == b"manual\n"
+    assert not (ws_root / "created.py").exists()
+    (ws_root / "app.py").write_bytes(b"second\n")
+    assert cs.undo() == {"restored": 2, "removed": 0, "failed": []}
+
+
+@pytest.mark.parametrize("action", [ACTION_CREATED, ACTION_MODIFIED])
+def test_legacy_records_without_hashes_are_not_automatically_undone(ws, ws_root, action):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    backup = ws_root / ".aegis_backup" / TASK_ID / "app.py"
+    backup.parent.mkdir(parents=True)
+    backup.write_bytes(b"old\n")
+    cs.add("app.py", action, ws.rel_path(backup))
+    before = (ws_root / "app.py").read_bytes()
+    out = cs.undo()
+    assert len(out["failed"]) == 1
+    assert (ws_root / "app.py").read_bytes() == before
+    assert len(cs.records) == 1
+
+
+def test_undo_rejects_corrupted_backup(ws, ws_root):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    change = fileio.write_file(ws, cs, "app.py", "agent\n")
+    (ws_root / change["backup_path"]).write_bytes(b"corrupted\n")
+    out = cs.undo()
+    assert len(out["failed"]) == 1
+    assert (ws_root / "app.py").read_bytes() == b"agent\n"
+
+
+@pytest.mark.parametrize("field", ["path", "backup_path"])
+def test_undo_revalidates_record_paths(ws, ws_root, outside_root, field):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    fileio.write_file(ws, cs, "app.py", "agent\n")
+    setattr(cs.records[0], field, "../outside/secret.txt")
+    before = (outside_root / "secret.txt").read_bytes()
+    out = cs.undo()
+    assert len(out["failed"]) == 1
+    assert (outside_root / "secret.txt").read_bytes() == before
+    assert (ws_root / "app.py").read_bytes() == b"agent\n"
+
+
+@pytest.mark.parametrize("task_id", ["../outside", "a/../../outside", ".."])
+def test_backup_rejects_task_id_path_traversal(ws, ws_root, outside_root, task_id):
+    before = (ws_root / "app.py").read_bytes()
+    with pytest.raises(ToolError) as exc:
+        fileio.backup_file(ws, task_id, "app.py")
+    assert exc.value.code == "BACKUP_FAILED"
+    assert (ws_root / "app.py").read_bytes() == before
+    assert not (outside_root / "app.py").exists()
+
+
+def test_undo_restore_failure_keeps_target_and_record(ws, ws_root, monkeypatch):
+    import apps.agent.trace as trace
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    fileio.write_file(ws, cs, "app.py", "agent\n")
+    def interrupted_copy(source, destination):
+        with open(destination, "wb") as output:
+            output.write(b"partial")
+        raise OSError("simulated copy failure")
+    monkeypatch.setattr(trace.shutil, "copy2", interrupted_copy)
+    out = cs.undo()
+    assert len(out["failed"]) == 1
+    assert (ws_root / "app.py").read_bytes() == b"agent\n"
+    assert len(cs.records) == 1
+    assert not list(ws_root.glob("*.aegis-tmp-*"))
+
+
+def test_undo_stops_at_manual_edit_between_agent_writes(ws, ws_root):
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    first = fileio.write_file(ws, cs, "app.py", "first\n")
+    (ws_root / "app.py").write_bytes(b"manual\n")
+    fileio.write_file(ws, cs, "app.py", "second\n")
+    out = cs.undo()
+    assert out["restored"] == 1
+    assert [f["change_id"] for f in out["failed"]] == [first["change_id"]]
+    assert (ws_root / "app.py").read_bytes() == b"manual\n"
+    assert [r.change_id for r in cs.records] == [first["change_id"]]
+
+
+def test_backup_rejects_symlink_outside_workspace(ws, ws_root, outside_root):
+    try:
+        (ws_root / BACKUP_ROOT).symlink_to(outside_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("当前用户无创建符号链接权限")
+    with pytest.raises(ToolError) as exc:
+        fileio.backup_file(ws, TASK_ID, "app.py")
+    assert exc.value.code == "BACKUP_FAILED"
+    assert not (outside_root / TASK_ID).exists()
+
+
+def test_invalid_record_does_not_block_undo_of_another_file(ws, ws_root):
+    original = (ws_root / "app.py").read_bytes()
+    cs = ChangeSet(task_id=TASK_ID, workspace=str(ws.root))
+    fileio.write_file(ws, cs, "app.py", "agent\n")
+    invalid = fileio.write_file(ws, cs, "other.py", "other\n")
+    cs.records[-1].path = "../outside/secret.txt"
+    out = cs.undo()
+    assert out["restored"] == 1
+    assert [f["change_id"] for f in out["failed"]] == [invalid["change_id"]]
+    assert (ws_root / "app.py").read_bytes() == original
+    assert [r.change_id for r in cs.records] == [invalid["change_id"]]

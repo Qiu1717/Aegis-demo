@@ -102,6 +102,92 @@ def model_config(context=0, active="primary"):
                            "api_key": "test-backup"}}}
 
 
+def test_discovered_models_survive_reload_and_drive_real_budgets(settings_env, monkeypatch):
+    services, keys = settings_env
+    keys['deepseek'] = 'test-saved'
+    services.save_providers({'active': 'deepseek', 'providers': [{'key': 'deepseek',
+        'base_url': 'https://models.invalid/v1', 'model': 'small', 'context_length': 0}]})
+    class Response:
+        status_code = 200
+        def json(self):
+            return {'data': [{'id': 'large', 'name': 'Large', 'context_window': 1048576, 'max_output_tokens': 16384},
+                             {'id': 'small', 'context_window': 300000, 'max_output_tokens': 8192}]}
+    monkeypatch.setattr(services.requests, 'get', lambda *args, **kwargs: Response())
+    result = services.list_models('deepseek')
+    assert result['ok'] and result['models'] == ['large', 'small']
+    assert result['model_details'][0]['context_length'] == 1048576
+    import apps.llm as llm
+    view = services.get_providers()
+    provider = next(p for p in view['providers'] if p['key'] == 'deepseek')
+    assert provider['candidate_models'] == ['large', 'small']
+    assert provider['context_length_effective'] == 300000
+    small_budget = llm.get_client().input_budget(llm.get_client().first_available(False))
+    assert small_budget > 250000
+    services.save_providers({'active': 'deepseek', 'providers': [{'key': 'deepseek', 'model': 'large'}]})
+    client = llm.get_client()
+    large = client.first_available(False)
+    assert large.model == 'large' and large.context_length == 1048576
+    assert client.input_budget(large) > small_budget
+    payload = client._payload(large, [{'role': 'user', 'content': 'hello'}], False)
+    assert payload['model'] == 'large'
+    services.save_providers({'providers': [{'key': 'deepseek', 'context_length': 2000000}]})
+    assert llm.get_client().first_available(False).context_length == 1048576
+    services.save_providers({'providers': [{'key': 'deepseek', 'base_url': 'https://changed.invalid/v1'}]})
+    changed = next(p for p in services.get_providers()['providers'] if p['key'] == 'deepseek')
+    assert 'large' not in changed['candidate_models']
+
+
+def test_empty_remote_model_list_does_not_claim_success(settings_env, monkeypatch):
+    services, keys = settings_env
+    keys['deepseek'] = 'test-key'
+    class Response:
+        status_code = 200
+        def json(self):
+            return {'data': []}
+    monkeypatch.setattr(services.requests, 'get', lambda *args, **kwargs: Response())
+    result = services.list_models('deepseek')
+    assert result['ok'] is False
+    assert result['error']['code'] == 'EMPTY_MODELS'
+
+
+def test_switching_model_drops_previous_manual_window(settings_env):
+    services, _ = settings_env
+    services.save_providers({'providers': [{'key': 'deepseek', 'model': 'old', 'context_length': 300000}]})
+    services.save_providers({'providers': [{'key': 'deepseek', 'model': 'new'}]})
+    current = next(p for p in services.get_providers()['providers'] if p['key'] == 'deepseek')
+    assert current['context_length'] == 0
+
+
+def test_remote_output_limit_is_applied_to_payload_and_input_reserve():
+    from apps.llm.client import LLMClient
+    config = model_config()
+    config['max_tokens'] = 100000
+    config['providers']['primary'].update(model='test-model', model_details_base_url='https://primary.invalid/v1',
+        model_details=[{'id': 'test-model', 'context_length': 300000, 'max_output_tokens': 8192}])
+    client = LLMClient(config)
+    provider = client.first_available(False)
+    assert client._payload(provider, [{'role': 'user', 'content': 'hi'}], False)['max_tokens'] == 8192
+    assert client.input_budget(provider) == 300000 - 8192 - 256
+
+
+def test_new_custom_provider_keeps_models_fetched_before_saving(settings_env, monkeypatch):
+    services, _ = settings_env
+    class Response:
+        status_code = 200
+        def json(self):
+            return {'data': [{'id':'new-model', 'context_window':1048576}]}
+    monkeypatch.setattr(services.requests,'get',lambda *args,**kwargs:Response())
+    assert services.list_models('custom',base_url='https://new.invalid/v1',api_key='test-new')['ok']
+    result=services.save_providers({'active':'fresh', 'providers':[{'key':'fresh',
+        'base_url':'https://new.invalid/v1','api_key':'test-new','model':'new-model'}]})
+    provider=next(p for p in result['providers'] if p['key']=='fresh')
+    assert provider['candidate_models']==['new-model']
+    assert provider['context_length_effective']==1048576
+    services.save_providers({'providers':[{'key':'fresh','api_key':'test-other'}]})
+    provider=next(p for p in services.get_providers()['providers'] if p['key']=='fresh')
+    assert provider['context_length_effective']!=1048576
+
+
 @pytest.mark.parametrize("mode", ["stream", "complete", "stream_tools", "complete_tools"])
 def test_selected_provider_failure_never_calls_backup(settings_env, monkeypatch, mode):
     from apps.llm.client import LLMClient, ProviderFailed

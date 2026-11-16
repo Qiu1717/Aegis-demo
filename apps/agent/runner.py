@@ -215,7 +215,7 @@ class AgentRunner:
         self.cancel_event = cancel_event or threading.Event()
 
         # ── 权限模式（四种；见 apps/settings 的 PERMISSION_MODES）──
-        #   full    完全访问：文件读写类操作不再逐次审批（危险命令仍需确认）
+        #   full    完全访问：工作区内的工具操作不再逐次审批
         #   approve 需用户批准：读自动放行，写/命令逐次确认（默认）
         #   plan    只读计划：允许理解项目，但不产生写入或命令副作用
         #   chat    仅保留对话：完全禁用一切工具，只回答与讨论
@@ -226,7 +226,7 @@ class AgentRunner:
         self.plan_mode = mode == "plan"
         #: 是否允许使用任何工具（chat 模式硬禁用）
         self.tools_enabled = mode != "chat"
-        # 完全访问等价于「自动批准写入」，危险命令始终需要确认（安全底线不变）
+        # 兼容旧的自动批准写入选项；完全访问的审批决策见 _is_exempt。
         self.auto_approve_write = bool(auto_approve_write) or (mode == "full")
         self.system_prompt = system_prompt or ""
         #: 思考量级（light / balanced / max）—— 注入 system 提示词，仅作倾向引导
@@ -460,10 +460,13 @@ class AgentRunner:
 
     # ── messages 组装 ─────────────────────────────────────
     def _build_system(self) -> str:
-        return build_system_prompt(
+        prompt = build_system_prompt(
             self.ws, native_tools=self.native_tools, base_prompt=self.system_prompt,
             thinking_level=self.thinking_level, skills=self.skills,
             web_enabled=self.web_enabled, plan_mode=self.plan_mode)
+        if self.permission_mode == "full":
+            prompt += "\n【当前权限：完全访问】用户已授权执行本次任务所需的工具操作，不需要再次请求操作批准；直接调用工具完成任务。仍须遵守工作区路径限制，需求不明确时先澄清。"
+        return prompt
 
     def _init_messages(self) -> List[dict]:
         from apps.llm import get_client
@@ -780,6 +783,8 @@ class AgentRunner:
     # ── 工具执行（含审批）─────────────────────────────────
     def _is_exempt(self, tool: str, risk: str, dangerous: bool) -> bool:
         """是否免审批"""
+        if self.permission_mode == "full":
+            return True
         if dangerous:
             return False
         if risk == RISK_READONLY:
@@ -901,6 +906,8 @@ class AgentRunner:
             if decision == DECISION_ALLOW_SESSION and not dangerous:
                 self.ctx.session_allowed.add(call.name)
 
+        yield {"type": "tool_start", "step": step, "tool": call.name,
+               "call_id": call.id, "summary": event.get("summary", "")}
         result = dispatch(self.ctx, call.name, call.args, call_id=call.id)
 
         # 终端实时输出等由工具侧投递的事件
@@ -1172,13 +1179,14 @@ class AgentRunner:
             yield {"type": "notice",
                    "content": "⚠️ 你连续拒绝了多次操作，已停止本次任务。"}
 
+        # 结束事件允许前端关闭读取并继续下一轮，必须先保存本轮结果。
+        self._finalize()
         elapsed_ms = int((time.time() - started) * 1000)
-        yield {"type": "run_end", "task_id": self.task_id,
+        yield {"type": "run_end", "task_id": self.task_id, "session_id": self.session_id,
                "stats": {"steps": steps, "tool_calls": tool_calls_count,
                          "changes": len(self.changeset.records),
                          "stopped_by": stopped_by, "elapsed_ms": elapsed_ms}}
 
-        self._finalize()
         # 旧前端的收尾事件（向后兼容，AG-09②）
         yield {"type": "done", "session_id": self.session_id}
 

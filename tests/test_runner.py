@@ -5,7 +5,7 @@ tests/test_runner.py — Agent 编排循环（25 步上限 / 审批挂起 / 事�
 验收点（T03/T04）：
     · 步数上限生效（默认 25，可配；到顶强制总结）
     · 单条工具结果 >6000 字符截断
-    · 危险命令必弹审批，且 auto_approve_write / 本任务豁免都不放行
+    · 需批准模式下危险命令必弹审批；完全访问免审批但仍拒绝越界路径
     · 审批超时按 deny 处理，不悬挂
     · `run_end` 后补发 `done`
     · 未配置模型 → error + need_settings=true，不进循环
@@ -219,6 +219,43 @@ def test_dangerous_allow_session_still_asks_next_time(ws, fake_client):
     assert any(e["type"] == "approval_request" and e["dangerous"] for e in events)
 
 
+def test_full_access_executes_dangerous_command_without_approval(ws, fake_client, monkeypatch):
+    fake_client(script=[native_tool_events("run_command", {"command": "rm -rf ."})])
+    executed = []
+
+    def fake_dispatch(ctx, tool, args, call_id=""):
+        executed.append((tool, args))
+        return ToolResult(call_id=call_id, tool=tool, ok=True, data={"exit_code": 0})
+
+    # 只验证审批决策与分发，绝不实际执行破坏性命令。
+    monkeypatch.setattr(runner_mod, "dispatch", fake_dispatch)
+    r = AgentRunner(workspace=ws, user_task="x", permission_mode="full", config={})
+    r.approval_timeout = 1
+    events = _collect(r.run())
+    assert not any(e["type"] == "approval_request" for e in events)
+    assert executed == [("run_command", {"command": "rm -rf ."})]
+    assert any(e["type"] == "tool_call" and e["risk"] == "dangerous" for e in events)
+
+
+def test_tool_start_is_emitted_after_approval_and_before_dispatch(ws, fake_client, monkeypatch):
+    fake_client(script=[native_tool_events("write_file", {"path": "test.txt", "content": "ok"})])
+    executed = []
+    monkeypatch.setattr(runner_mod, "dispatch", lambda ctx, tool, args, call_id="":
+                        executed.append(tool) or ToolResult(call_id=call_id, tool=tool, ok=True, data={}))
+    r = AgentRunner(workspace=ws, user_task="x", config={})
+    kinds = []
+    for event in r.run():
+        kinds.append(event["type"])
+        if event["type"] == "approval_request":
+            assert not executed
+            approval_manager.resolve(event["request_id"], "allow_once")
+        if event["type"] == "tool_start":
+            assert not executed
+            assert event["tool"] == "write_file"
+    assert kinds.index("approval_resolved") < kinds.index("tool_start") < kinds.index("tool_result")
+    assert executed == ["write_file"]
+
+
 def test_write_tool_auto_approve_when_enabled(ws, fake_client, ws_root):
     fake_client(script=[native_tool_events(
         "write_file", {"path": "new.py", "content": "print(1)\n"})])
@@ -245,10 +282,11 @@ def test_allow_session_exempts_same_tool(ws, fake_client, ws_root):
 
 
 # ── 工作区外的绝对路径：直接拒绝，不进审批 ────────────────────
-def test_outside_path_rejected_without_approval(ws, outside_root, fake_client):
+@pytest.mark.parametrize("mode", ["approve", "full"])
+def test_outside_path_rejected_without_approval(ws, outside_root, fake_client, mode):
     fake_client(script=[native_tool_events(
         "run_command", {"command": "python %s" % (outside_root / "evil.py")})])
-    r = AgentRunner(workspace=ws, user_task="x", config={})
+    r = AgentRunner(workspace=ws, user_task="x", permission_mode=mode, config={})
     events = _collect(r.run())
     assert not any(e["type"] == "approval_request" for e in events), (
         "越界路径不应弹审批，应直接拒绝")
@@ -413,6 +451,19 @@ def test_fallback_final_text(ws, fake_client, monkeypatch):
 
 
 # ── parser：原生工具参数流式累积 ───────────────────────────
+def test_answer_is_persisted_before_run_end_can_close_the_stream(ws, fake_client, monkeypatch):
+    fake_client(script=[[{"type":"delta","content":"answer"}]])
+    runner = AgentRunner(workspace=ws, user_task="hello", config={})
+    saved = []
+    monkeypatch.setattr(runner, "_finalize", lambda: saved.append(runner.final_text))
+    stream = runner.run()
+    for event in stream:
+        if event["type"] == "run_end":
+            assert saved == ["answer"]
+            break
+    stream.close()
+
+
 def test_native_tools_accumulate_and_finalize():
     from apps.agent.parser import accumulate_tool_delta, finalize_tool_calls
     buf = {}

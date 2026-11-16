@@ -176,9 +176,9 @@
         var preset = findPreset(state.current);
         if (list) {
             var models = (p && p.candidate_models) || (preset && preset.candidate_models) || [];
-            var html = "";
+            var html = '<option value="">选择模型</option>';
             for (var i = 0; i < models.length; i++) {
-                html += '<option value="' + escAttr(models[i]) + '"></option>';
+                html += '<option value="' + escAttr(models[i]) + '">' + esc(models[i]) + '</option>';
             }
             list.innerHTML = html;
         }
@@ -186,7 +186,42 @@
         if (input) {
             input.value = (draftOf(state.current).model)
                 || (p && p.model) || (preset && preset.default_model) || "";
+            if (list) list.value = input.value;
         }
+    }
+
+    function fillFetchedModels(list, models, selected, remote) {
+        if (!list) return;
+        list.textContent = "";
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = remote ? "选择已拉取模型" : "内置候选（未验证）";
+        list.appendChild(placeholder);
+        models.forEach(function (name) {
+            var option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            list.appendChild(option);
+        });
+        list.value = models.indexOf(selected) >= 0 ? selected : "";
+    }
+
+    function modelChanged() {
+        var input = $("stModel");
+        if (!input) return;
+        var p = findProvider(state.current) || {};
+        var draft = draftOf(state.current);
+        var name = input.value.trim();
+        if (name !== (draft.model || p.model)) {
+            draft.context_length = 0;
+            if ($("stContextLen")) $("stContextLen").value = 0;
+        }
+        draft.model = name;
+        var metadata = (p.model_details || []).filter(function (item) { return item.id === name; })[0];
+        if ($("stContextHint")) $("stContextHint").textContent = metadata && metadata.context_length
+            ? "远端模型窗口 " + metadata.context_length + " token；自动扣除输出、系统与工具开销。"
+            : "该模型未返回窗口信息，使用保守预算；可手动设置已确认的窗口。";
+        if ($("stModelList")) $("stModelList").value = name;
     }
 
     function renderProvider() {
@@ -256,10 +291,12 @@
             var eff = (p && p.context_length_effective) || 0;
             var shown = (p && p.context_length) || 0;
             ctxHint.textContent = shown > 0
-                ? "已设置总窗口 " + shown + " token；扣除输出、系统与工具开销后用于历史。设置不能扩展服务商能力。"
+                ? "本地设置 " + shown + "，实际窗口 " + eff + " token；已知模型上限优先。"
+                : (p && p.context_source === "remote"
+                    ? "自动使用远端模型窗口 " + eff + " token，扣除输出、系统与工具开销后用于历史。"
                 : (eff > 0
                     ? "留 0 = 安全默认预算；模型窗口估计约 " + eff + " token。设置不能扩展服务商能力。"
-                    : "留 0 = 按模型自动推断；无法识别时按 32768 保守处理。");
+                    : "留 0 = 按模型自动推断；无法识别时按 32768 保守处理。"));
         }
 
         /* 删除按钮：内置预设也允许删（用户通常都是自带 Key 接自己的中转），
@@ -549,20 +586,15 @@
         }).then(function (res) {
             var data = res || {};
             var models = data.models || [];
-            if (list) {
-                list.textContent = "";
-                for (var i = 0; i < models.length; i++) {
-                    var opt = document.createElement("option");
-                    opt.value = models[i];
-                    list.appendChild(opt);
-                }
-            }
-            if (data.ok) {
+            if (url !== (($("stCustUrl") || {}).value || "").trim()
+                    || apiKey !== (($("stCustApiKey") || {}).value || "").trim()) return data;
+            fillFetchedModels(list, models, (($("stCustModel") || {}).value || ""), data.ok || data.source === "remote");
+            if (data.ok && models.length) {
                 var src = data.source === "preset" ? "（来自内置候选）" : "";
-                say("已获取 " + models.length + " 个模型" + src + "，点击输入框下拉选择", "ok");
+                say("已获取 " + models.length + " 个模型" + src + "，在模型列表中选择", "ok");
                 toast("已获取 " + models.length + " 个模型", "success");
             } else {
-                var reason = (data.error && data.error.reason) || "拉取失败";
+                var reason = (data.error && data.error.reason) || (models.length ? "拉取失败" : "服务商未返回可用模型");
                 var action = (data.error && data.error.action) || "";
                 say(reason + (action ? "。" + action : ""), "warn");
                 if (models.length) {
@@ -606,19 +638,20 @@
         }).then(function (res) {
             var data = res || {};
             var models = data.models || [];
-            if (list) {
-                list.textContent = "";
-                for (var i = 0; i < models.length; i++) {
-                    var opt = document.createElement("option");
-                    opt.value = models[i];
-                    list.appendChild(opt);
+            if (state.current !== key || baseUrl !== (($("stBaseUrl") || {}).value || "").trim()
+                    || apiKey !== (($("stApiKey") || {}).value || "").trim()) return data;
+            fillFetchedModels(list, models, (($("stModel") || {}).value || ""), data.ok || data.source === "remote");
+            if (data.ok && models.length) {
+                var provider = findProvider(key);
+                if (provider) {
+                    provider.candidate_models = models;
+                    provider.model_details = data.model_details || [];
                 }
-            }
-            if (data.ok) {
-                say("已获取 " + models.length + " 个模型，点击「模型」输入框下拉选择。", false);
+                try { window.dispatchEvent(new CustomEvent("aegis:settings-changed")); } catch (e) {}
+                say("已获取 " + models.length + " 个模型，请在模型列表中选择。", false);
                 toast("已获取 " + models.length + " 个模型", "success");
             } else {
-                var reason = (data.error && data.error.reason) || "拉取失败";
+                var reason = (data.error && data.error.reason) || (models.length ? "拉取失败" : "服务商未返回可用模型");
                 var action = (data.error && data.error.action) || "";
                 say(reason + (action ? "。" + action : "")
                     + (models.length ? "（内置候选仅供参考 " + models.length + " 个）" : ""), true);
@@ -1678,6 +1711,13 @@
         }
 
         if ($("stToggleKey")) $("stToggleKey").addEventListener("click", onToggleKey);
+        if ($("stModelList")) $("stModelList").addEventListener("change", function () {
+            if (this.value && $("stModel")) { $("stModel").value = this.value; modelChanged(); }
+        });
+        if ($("stModel")) $("stModel").addEventListener("change", modelChanged);
+        if ($("stCustModelList")) $("stCustModelList").addEventListener("change", function () {
+            if (this.value && $("stCustModel")) $("stCustModel").value = this.value;
+        });
         if ($("stCustAddBtn")) $("stCustAddBtn").addEventListener("click", addCustomProvider);
         if ($("stFetchModelsBtn")) $("stFetchModelsBtn").addEventListener("click", fetchModels);
         /* 模型区也放了一个「拉取模型」：对应当前选中的厂商，

@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 import os
+import hashlib
 
 # ── 服务商预设 ────────────────────────────────────────────
 PRESETS: Dict[str, dict] = {
@@ -177,6 +178,9 @@ class Provider:
     #: 由厂商配置项 `context_length` 覆盖；缺省时按 model 猜测。
     context_length: int = 0
     context_length_explicit: bool = False
+    model_context_length: int = 0
+    max_output_tokens: int = 0
+    context_source: str = "inferred"
 
     @property
     def endpoint(self) -> str:
@@ -367,6 +371,23 @@ def guess_context_length(model: str, provider_key: str = "") -> int:
     return DEFAULT_CONTEXT_LENGTH
 
 
+def model_credential(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def discovered_models(cfg: dict, base_url: str, api_key: str = "") -> list:
+    if normalize_base_url(cfg.get("model_details_base_url", "")) != normalize_base_url(base_url):
+        return []
+    if cfg.get("model_details_credential") and cfg["model_details_credential"] != model_credential(api_key):
+        return []
+    details = cfg.get("model_details")
+    return [item for item in details if isinstance(item, dict) and isinstance(item.get("id"), str)] if isinstance(details, list) else []
+
+
+def model_limit(value) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= 4_000_000 else 0
+
+
 def build_provider(key: str,
                    cfg: Optional[dict] = None,
                    default_timeout: int = 60) -> Provider:
@@ -389,12 +410,19 @@ def build_provider(key: str,
     except (TypeError, ValueError):
         explicit_context = False
 
+    secret = _resolve_api_key(key, cfg, auth_env)
+    metadata = next((item for item in discovered_models(cfg, base_url, secret) if item["id"] == model), {})
+    supported = model_limit(metadata.get("context_length"))
+    context = _resolve_context_length(cfg.get("context_length"), model, key)
+    if supported:
+        context = min(context, supported) if explicit_context else supported
+
     return Provider(
         key=key,
         label=cfg.get("label") or preset["label"],
         base_url=normalize_base_url(base_url),
         model=model,
-        api_key=_resolve_api_key(key, cfg, auth_env),
+        api_key=secret,
         enabled=bool(cfg.get("enabled", True)),
         requires_key=bool(cfg.get("requires_key", preset["requires_key"])),
         timeout=int(cfg.get("timeout") or default_timeout),
@@ -403,8 +431,11 @@ def build_provider(key: str,
         key_url=preset["key_url"],
         supports_tools=cfg.get("supports_tools") or preset.get("supports_tools", "unknown"),
         # 上下文窗口：显式配置优先，否则按模型名猜测
-        context_length=_resolve_context_length(cfg.get("context_length"), model, key),
-        context_length_explicit=explicit_context,
+        context_length=context,
+        context_length_explicit=explicit_context or bool(supported),
+        model_context_length=supported,
+        max_output_tokens=model_limit(metadata.get("max_output_tokens")),
+        context_source="remote" if supported else ("manual" if explicit_context else "inferred"),
     )
 
 

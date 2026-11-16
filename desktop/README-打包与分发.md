@@ -149,11 +149,15 @@ dist\Aegis\                     （整体约 24MB）
 | 配置 | 作用 |
 |---|---|
 | `AppId` 为固定常量（不随版本变化） | Inno Setup 据此识别为“同一应用的新版本”，走升级而非并存 |
-| `DefaultDirName={autopf}\Aegis` 固定 | 新版覆盖到同一安装目录 |
+| `DefaultDirName={autopf}\Aegis` | 首次安装的建议目录；升级默认沿用原目录，可在目录页修改 |
+| `DisableDirPage=no` | 每次安装都显示目录选择页 |
+| `AppendDefaultDirName=no` | 浏览后不自动追加 Aegis，并显示“新建文件夹”按钮 |
 | `[Files]` 带 `ignoreversion recursesubdirs createallsubdirs` | 逐文件覆盖旧程序（含 `_internal`），同名文件以新版为准 |
 | 无 `[UninstallDelete]` 段 | 升级/卸载都不会碰用户数据目录 |
 
 **升级时被保留**（都在 `%APPDATA%\Aegis\`，不在安装目录内）：会话数据库、`config.user.json`（含已注册/启用的技能、自定义模型服务商）、系统凭据库中的密钥、日志。旧配置若还没有 `skills` 段，首次启动读取技能清单时会自动补齐内置技能，无需手工迁移。
+
+自定义目录：在“选择目标位置”页点击“浏览”，选择盘符或父目录，点击“新建文件夹”并填写名称，再确认。也可在路径输入框直接填写尚不存在的目录，例如 `D:\我的应用\Aegis测试版`，安装时会创建该目录；安装位置以输入框的完整路径为准。安装到其他目录仍使用同一份用户数据，不构成独立测试环境。
 
 > 建议：跨大版本升级前先备份 `%APPDATA%\Aegis\`（复制整个文件夹即可），出问题可整目录还原。
 

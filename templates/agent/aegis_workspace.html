@@ -209,8 +209,10 @@
                         </div>
                     </div>
                     <div class="aw-msgs" id="awMsgs"></div>
-                    <!-- 生成中指示：SSE 首个 chunk 到达前显示，避免「点了没反应」的空窗 -->
-                    <div class="aw-busy" id="awBusy" hidden>
+                    <!-- 审批不受任务详情折叠设置影响。 -->
+                    <div id="awApprovals" aria-label="待确认的操作"></div>
+                    <!-- 根据实际执行事件更新，任务结束后隐藏。 -->
+                    <div class="aw-busy" id="awBusy" role="status" aria-live="polite" hidden>
                         <span class="aw-busy-dots" aria-hidden="true"><i></i><i></i><i></i></span>
                         <span class="aw-busy-text" id="awBusyText">Aegis 正在思考…</span>
                         <button class="aw-busy-stop" id="awBusyStop" type="button">停止</button>
@@ -243,6 +245,10 @@
                             </svg>
                             <span id="awWsLabel">选择工作区</span>
                         </button>
+                        <select class="aw-select aw-model-select" id="awModelSelect" aria-label="切换模型" disabled>
+                            <option value="">加载模型…</option>
+                        </select>
+                        <span class="aw-model-context" id="awModelContext" role="status"></span>
                         <button class="aw-send" id="awSend" type="submit" aria-label="发送" title="发送" disabled>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2"
@@ -324,6 +330,7 @@
 <script src="/static/js/common.js?v={{ static_ver }}"></script>
 <script src="/static/js/settings.js?v={{ static_ver }}"></script>
 <script src="/static/js/workspace_extras.js?v={{ static_ver }}"></script>
+<script src="/static/js/workspace_models.js?v={{ static_ver }}"></script>
 <script src="/static/js/workspace.js?v={{ static_ver }}"></script>
 </body>
 </html>

@@ -71,7 +71,8 @@ def list_models():
             base_url=body.get("base_url"),
         )
         # 失败也用 code=0：这属于「预期内的业务结果」（端点可能不实现 /models）
-        return api_ok(result, msg="已获取 %d 个模型" % len(result.get("models") or []))
+        return api_ok(result, msg=("已获取 %d 个模型" % len(result.get("models") or []))
+                      if result.get("ok") else ((result.get("error") or {}).get("reason") or "拉取模型失败"))
     except Exception:
         logger.exception("拉取模型列表失败")
         return api_fail("拉取模型列表失败，请查看服务日志", code=500)
